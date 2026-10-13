@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#FFFFFF">
+<title>menú · la central café</title>
+<link rel="icon" href="img/taza.svg">
+<link rel="preload" href="fonts/Utendo-ExtraBold.ttf" as="font" type="font/ttf" crossorigin>
+<link rel="preload" href="fonts/Utendo-Medium.ttf" as="font" type="font/ttf" crossorigin>
+<link rel="stylesheet" href="styles.css?v=11">
+<script type="module" src="vendor/model-viewer.min.js"></script>
+</head>
+<body>
+<a class="skip" href="#carta">Ir a la carta</a>
+
+<header class="top">
+  <h1 class="logo" id="logo" aria-label="la central café"></h1>
+  <span class="mesa" id="mesa" hidden></span>
+</header>
+
+<div class="iconos" id="iconos" aria-hidden="true"></div>
+
+<section class="intro">
+  <p class="intro-t">menú</p>
+  <p class="hint"><span class="ring ring-sm" aria-hidden="true">3D</span><span>Toca <b>3D</b> para ver el plato y ponerlo sobre tu mesa.</span></p>
+</section>
+
+<nav class="tabs" id="tabs" aria-label="Secciones de la carta"></nav>
+<main id="carta"></main>
+
+<footer class="foot">
+  <div class="foot-logo" id="foot-logo" aria-hidden="true"></div>
+  <div class="iconos iconos-inv" id="iconos-foot" aria-hidden="true"></div>
+  <p>Precios en pesos colombianos</p>
+  <p class="test">Vista previa · modelos 3D de prueba</p>
+</footer>
+
+<!-- Visor 3D / AR -->
+<dialog id="visor" aria-labelledby="v-nombre">
+  <div class="v-stage">
+    <model-viewer id="mv" ar ar-modes="webxr scene-viewer quick-look" ar-scale="fixed" ar-placement="floor"
+      camera-controls touch-action="pan-y" auto-rotate auto-rotate-delay="800" rotation-per-second="18deg"
+      shadow-intensity="1.2" shadow-softness="0.7" exposure="1.0" environment-image="neutral"
+      camera-orbit="30deg 65deg auto" interaction-prompt="none">
+      <button slot="ar-button" class="ar-btn"><span class="ring ring-inv" aria-hidden="true">3D</span>ver en mi mesa</button>
+      <div slot="progress-bar" class="v-progress"><span id="v-bar"></span></div>
+    </model-viewer>
+    <button class="v-close" id="v-close" aria-label="Cerrar"><span aria-hidden="true">×</span></button>
+    <span class="v-badge">modelo de prueba</span>
+    <p class="v-noar" id="v-noar" hidden>Abre este menú en tu celular para ver el plato sobre tu mesa.</p>
+  </div>
+  <div class="v-info">
+    <h2 id="v-nombre"></h2>
+    <p id="v-desc"></p>
+    <div class="v-precio" id="v-precio"></div>
+  </div>
+</dialog>
+
+<script type="module" src="app.js?v=11"></script>
+</body>
+</html>

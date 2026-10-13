@@ -1,0 +1,12 @@
+El registro de procesamiento de Adobe After Effects v26.5 Windows 64 para el procesamiento del proyecto "lacentral_logo.aep"
+
+ se inició en 09/10/2026 a las 20:13:05
+
+  09/10/2026 20:13:07: Iniciando composición "1 · La Central - Logo 1x1".
+
+  Configuración de procesamiento: Configuración óptima  Calidad: Óptima  Resolución: Completo  Tamaño: 1080 x 1080  Uso de proxy: No utilizar proxy  Efectos: Config. actual  Caché de disco: Sólo lectura  Profundidad de color: Config.  actual  Fusión fotog.: Sí para capas verif.  Proces. de campo: Desactivado  Telecine: Desactivado  Desenf. mov.: Sí para capas verif.     Solos: Config. actual     Espacio de tiempo: Personalizar  Inicio: 0:00:06:59  Fin: 0:00:06:59  Duración: 0:00:00:01  Velocidad de fotogramas: 60,00 (comp.)  Capas de guías: Todo desac.  Omitir archivos existentes: Desactivado    Módulo de salida: H.264: Ajustes de procesamiento de coincidencia, 15 Mbps  Salida a: C:\Users\juanj\Desktop\cafe_lacentral\ae\_test.mp4  Formato: H.264  Información de salida: VBR, objetivo 15 Mbps  Incluir: Enlace de proyecto  Salida de audio: Activado (si la composición tiene audio)  Canales: RGB  Profundidad: Millones de colores  Color: Premultiplicado  Cambiar tamaño: -  Cortar: -  Tamaño final: 1080 x 1080  Perfil: -  Incrustar perfil:      Acción de postprocesamiento: ninguno             0:00:06:59 (1): 0 segundos  09/10/2026 20:13:07: Composición finalizada "1 · La Central - Logo 1x1".
+
+
+  Tiempo total transc.: 2 segundos
+Registro cerrado en 09/10/2026 a las 20:13:07
+

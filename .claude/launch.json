@@ -1,0 +1,8 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "lacentral", "runtimeExecutable": "node", "runtimeArgs": ["app/server.mjs"], "port": 3000 },
+    { "name": "motion", "runtimeExecutable": "python", "runtimeArgs": ["-m", "http.server", "8765", "-d", "motion"], "port": 8765 },
+    { "name": "menu", "runtimeExecutable": "python", "runtimeArgs": ["-m", "http.server", "8766", "-d", "menu"], "port": 8766 }
+  ]
+}

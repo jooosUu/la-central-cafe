@@ -1,0 +1,9 @@
+{
+  "name": "La Central · Caja",
+  "short_name": "Caja",
+  "start_url": "/caja/",
+  "display": "standalone",
+  "background_color": "#FFFFFF",
+  "theme_color": "#000000",
+  "icons": [{ "src": "/img/taza.svg", "sizes": "any", "type": "image/svg+xml" }]
+}
