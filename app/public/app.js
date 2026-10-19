@@ -5,7 +5,6 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
 const cop = n => '$' + Math.round(n || 0).toLocaleString('es-CO');
 const numf = n => (Math.round(n * 100) / 100).toLocaleString('es-CO');
 const PAGOS = { efectivo: 'Efectivo', nequi: 'Nequi', daviplata: 'Daviplata', tarjeta: 'Tarjeta' };
-const CATS = ['choripan', 'adiciones', 'cervezas', 'sin alcohol'];
 
 async function api(method, path, body) {
   const r = await fetch('/api' + path, {
@@ -121,13 +120,15 @@ addEventListener('hashchange', router);
 
 // =================================================================== VENDER
 function vender() {
+  if (!S.categorias.some(c => c.id === S.cat)) S.cat = S.categorias[0]?.id;
+  const cat = S.categorias.find(c => c.id === S.cat);
   const ps = S.productos.filter(p => p.activo && p.categoria === S.cat);
   $('#vista').innerHTML = `
   <div class="vender">
     <section class="catalogo">
       <header class="v-head"><h1>vender</h1></header>
-      <div class="chips" role="tablist">${CATS.map(c => `<button role="tab" aria-selected="${c === S.cat}" data-cat="${c}">${c}</button>`).join('')}</div>
-      <div class="grid ${S.cat === 'choripan' ? 'grid-big' : ''}">${ps.map(tile).join('')}</div>
+      <div class="chips" role="tablist">${S.categorias.map(c => `<button role="tab" aria-selected="${c.id === S.cat}" data-cat="${esc(c.id)}">${esc(c.nombre.toLowerCase())}</button>`).join('')}</div>
+      <div class="grid ${cat?.tipo === 'destacado' ? 'grid-big' : ''}">${ps.map(tile).join('') || '<p class="vacio">No hay productos en venta en esta categoría.</p>'}</div>
     </section>
     <aside class="carrito" id="carrito"></aside>
   </div>`;
@@ -411,15 +412,28 @@ async function ajustes() {
   <section class="pagina">
     <header class="p-head"><h1>ajustes</h1></header><hr class="regla">
     ${admin ? `
-    <h2 class="sub">productos y precios</h2>
+    <div class="sub-head"><h2 class="sub">productos y precios</h2>
+      <div class="p-acc"><button class="btn btn-sm" id="nueva-cat">+ categoría</button><button class="btn btn-sm btn-negro" id="nuevo-prod">+ producto</button></div></div>
     <p class="muted">Lo que cambies aquí se ve al instante en el menú digital.</p>
     <div class="scroll-x"><table class="tabla tabla-prod"><thead><tr><th>producto</th><th class="n">precio</th><th class="n">combo</th><th>en venta</th><th></th></tr></thead><tbody>
-    ${S.productos.map(p => `<tr data-p="${p.id}"><td><b>${esc(p.nombre)}</b><br><small class="muted">${esc(p.categoria)}</small></td>
+    ${S.productos.map(p => `<tr data-p="${p.id}"><td><b>${esc(p.nombre)}</b><br><small class="muted">${esc(S.categorias.find(c => c.id === p.categoria)?.nombre || p.categoria)}${p.modelo ? ' · 3D' : ''}</small></td>
       <td class="n" data-l="precio"><input class="in-precio" name="precio" inputmode="numeric" value="${p.precio}" aria-label="Precio de ${esc(p.nombre)}"></td>
       <td class="n" data-l="combo">${p.precio_combo != null ? `<input class="in-precio" name="precio_combo" inputmode="numeric" value="${p.precio_combo}" aria-label="Precio combo de ${esc(p.nombre)}">` : '<span class="muted">—</span>'}</td>
       <td data-l="en venta"><label class="switch"><input type="checkbox" name="activo" ${p.activo ? 'checked' : ''} aria-label="${esc(p.nombre)} en venta"><i></i></label></td>
-      <td><button class="btn btn-sm link" data-receta="${p.id}">receta</button></td></tr>`).join('')}
-    </tbody></table></div>` : ''}
+      <td class="acc"><button class="btn btn-sm link" data-editp="${p.id}">editar</button><button class="btn btn-sm link" data-receta="${p.id}">receta</button></td></tr>`).join('')}
+    </tbody></table></div>
+
+    <h2 class="sub">códigos QR de las mesas</h2>
+    <p class="muted">Cada QR abre el menú con el número de la mesa. Usa la dirección pública del menú cuando esté publicado.</p>
+    <form class="qr-form" id="qr-form">
+      <label class="campo"><span>dirección del menú</span><input name="url" required value="${esc(location.origin + '/')}"></label>
+      <label class="campo"><span>mesas</span><input name="mesas" inputmode="numeric" required value="10"></label>
+      <button class="btn btn-negro">generar QR</button>
+    </form>
+
+    <h2 class="sub">copia de seguridad</h2>
+    <p class="muted">Se guarda una copia automática cada día en <b>app/data/respaldos</b> (últimos 14 días). También puedes descargar una ahora y guardarla en una USB o en la nube.</p>
+    <a class="btn" href="/api/respaldo" download>descargar copia de seguridad</a>` : ''}
     <h2 class="sub">${admin ? 'usuarios y PIN' : 'mi PIN'}</h2>
     <ul class="leaders">${usuarios.map(u => `<li><span class="nom">${esc(u.nombre)} <small class="muted">${u.rol}</small></span><span class="dots"></span>
       <button class="btn btn-sm" data-pin="${u.id}">cambiar PIN</button></li>`).join('')}</ul>
@@ -433,10 +447,64 @@ async function ajustes() {
     $('[name=activo]', tr).onchange = e => guardar('activo', e.target.checked);
   });
   $$('[data-receta]').forEach(b => b.onclick = () => editarReceta(b.dataset.receta));
+  $$('[data-editp]').forEach(b => b.onclick = () => editarProducto(S.productos.find(x => x.id === b.dataset.editp)));
+  $('#nuevo-prod')?.addEventListener('click', () => editarProducto(null));
+  $('#nueva-cat')?.addEventListener('click', nuevaCategoria);
+  const qf = $('#qr-form');
+  if (qf) qf.onsubmit = async e => {
+    e.preventDefault();
+    const fd = new FormData(qf);
+    try { mostrarQR(await api('GET', `/qr?url=${encodeURIComponent(fd.get('url'))}&mesas=${encodeURIComponent(fd.get('mesas'))}`)); }
+    catch (err) { toast(err.message, 'warn'); }
+  };
   $$('[data-pin]').forEach(b => b.onclick = () => abrirModal('cambiar PIN',
     '<label class="campo"><span>nuevo PIN (4 a 8 números)</span><input name="pin" inputmode="numeric" pattern="[0-9]{4,8}" required autocomplete="new-password"></label>',
     async fd => { await api('PUT', `/usuarios/${b.dataset.pin}/pin`, { pin: fd.get('pin') }); toast('PIN actualizado'); }));
 }
+function editarProducto(p) {
+  const opCat = S.categorias.map(c => `<option value="${esc(c.id)}" ${c.id === (p?.categoria ?? S.categorias[0]?.id) ? 'selected' : ''}>${esc(c.nombre)} · ${esc(c.seccion)}</option>`).join('');
+  const opMod = ['<option value="">sin modelo 3D</option>', ...S.modelos.map(m => `<option value="${esc(m)}" ${m === p?.modelo ? 'selected' : ''}>${esc(m)}</option>`)].join('');
+  abrirModal(p ? `editar · ${esc(p.nombre)}` : 'nuevo producto', `
+    <label class="campo"><span>nombre</span><input name="nombre" required maxlength="50" value="${esc(p?.nombre || '')}"></label>
+    <label class="campo"><span>categoría</span><select name="categoria">${opCat}</select></label>
+    <div class="fila2">
+      <label class="campo"><span>precio</span><input name="precio" inputmode="numeric" required value="${p?.precio ?? ''}"></label>
+      <label class="campo"><span>precio combo (opcional)</span><input name="precio_combo" inputmode="numeric" value="${p?.precio_combo ?? ''}"></label>
+    </div>
+    <label class="campo"><span>descripción para el menú (opcional)</span><textarea name="descripcion" rows="3" maxlength="300">${esc(p?.descripcion || '')}</textarea></label>
+    <label class="campo"><span>modelo 3D</span><select name="modelo">${opMod}</select></label>
+    <label class="check"><input type="checkbox" name="activo" ${!p || p.activo ? 'checked' : ''}> en venta y visible en el menú</label>`,
+  async fd => {
+    const b = Object.fromEntries(fd);
+    b.precio = String(b.precio).replace(/\D/g, ''); b.precio_combo = String(b.precio_combo).replace(/\D/g, '');
+    b.activo = fd.has('activo');
+    const r = p ? await api('PUT', `/productos/${p.id}`, b) : await api('POST', '/productos', b);
+    await cargar(); ajustes();
+    if (!p) { toast('Producto creado. Ahora define qué insumos descuenta.'); setTimeout(() => editarReceta(r.id), 80); return; }
+    toast('Producto guardado');
+  }, { ancho: true });
+}
+function nuevaCategoria() {
+  const secciones = [...new Set(S.categorias.map(c => c.seccion))];
+  abrirModal('nueva categoría', `
+    <label class="campo"><span>nombre</span><input name="nombre" required maxlength="30" placeholder="ej. Cafés calientes"></label>
+    <label class="campo"><span>título grande en el menú (sección)</span><input name="seccion" required maxlength="30" list="secciones" placeholder="ej. cafés"></label>
+    <datalist id="secciones">${secciones.map(x => `<option value="${esc(x)}">`).join('')}</datalist>
+    <label class="campo"><span>cómo se ve en el menú</span><select name="tipo">
+      <option value="lista">lista con puntos guía (bebidas, adiciones)</option>
+      <option value="destacado">platos grandes con foto 3D y combo</option></select></label>`,
+  async fd => { await api('POST', '/categorias', Object.fromEntries(fd)); await cargar(); ajustes(); toast('Categoría creada'); });
+}
+function mostrarQR(lista) {
+  abrirModal(`QR · ${lista.length} mesas`, `
+    <div class="qr-grid imprimible" id="qr-print">${lista.map(q => `
+      <figure class="qr-card"><div class="qr-logo" data-svg="/img/logo-horizontal.svg"></div>
+        <div class="qr-code">${q.svg}</div>
+        <figcaption><b>mesa ${q.mesa}</b><span>escanea y mira el menú en 3D</span></figcaption></figure>`).join('')}</div>`,
+  () => { window.print(); return false; }, { ok: 'imprimir', ancho: true });
+  pintarSVGs($('#qr-print'));
+}
+
 function editarReceta(pid) {
   const p = S.productos.find(x => x.id === pid);
   const opts = sel => S.insumos.filter(i => i.activo).map(i => `<option value="${i.id}" ${i.id === sel ? 'selected' : ''}>${esc(i.nombre)} (${esc(i.unidad)})</option>`).join('');

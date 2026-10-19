@@ -1,3 +1,4 @@
 data/*.db
 data/*.db-*
 data/usuarios-iniciales.json
+data/respaldos/

@@ -10,13 +10,17 @@ const pin = u => usuarios.find(x => x.usuario === u).pin;
 
 function cliente() {
   let cookie = '';
-  return async (method, path, body) => {
+  const f = async (method, path, body) => {
     const r = await fetch(BASE + '/api' + path, { method, headers: { 'Content-Type': 'application/json', cookie, origin: BASE }, body: body ? JSON.stringify(body) : undefined });
     const sc = r.headers.get('set-cookie'); if (sc) cookie = sc.split(';')[0];
-    return { status: r.status, data: await r.json() };
+    const ct = r.headers.get('content-type') || '';
+    return { status: r.status, data: ct.includes('json') ? await r.json() : null };
   };
+  f.cookie = () => cookie;
+  return f;
 }
 let ok = 0;
+const itemsCarta = d => d.secciones.flatMap(s => s.bloques.flatMap(b => b.items));
 const t = async (nombre, fn) => { await fn(); ok++; console.log('  ✓', nombre); };
 
 const anon = cliente(), admin = cliente(), caja = cliente();
@@ -81,9 +85,42 @@ await t('carta pública marca agotado cuando falta un insumo', async () => {
   const id = (await admin('GET', '/datos')).data.insumos.find(i => i.nombre === 'Te HATSU').id;
   const antes = await stock('Te HATSU');
   await admin('POST', `/insumos/${id}/movimientos`, { tipo: 'ajuste', conteo: 0 });
-  assert.equal((await anon('GET', '/carta')).data.find(p => p.id === 'te-hatsu').agotado, true);
+  assert.equal(itemsCarta((await anon('GET', '/carta')).data).find(p => p.id === 'te-hatsu').agotado, true);
   await admin('POST', `/insumos/${id}/movimientos`, { tipo: 'ajuste', conteo: antes });
-  assert.equal((await anon('GET', '/carta')).data.find(p => p.id === 'te-hatsu').agotado, false);
+  assert.equal(itemsCarta((await anon('GET', '/carta')).data).find(p => p.id === 'te-hatsu').agotado, false);
+});
+await t('carta trae secciones del menú con combo y modelo 3D', async () => {
+  const d = (await anon('GET', '/carta')).data;
+  assert.deepEqual(d.secciones.map(s => s.titulo), ['choripan', 'bebidas']);
+  const chori = itemsCarta(d).find(p => p.id === 'choripan');
+  assert.equal(chori.model, 'choripan');
+  assert.deepEqual(chori.comboIncluye, ['+papa criolla', '+coca-cola zero 250ml']);
+});
+await t('dueño crea categoría y producto; aparece en la carta; cajero no puede', async () => {
+  assert.equal((await caja('POST', '/productos', { nombre: 'X', categoria: 'choripan', precio: 1 })).status, 403);
+  assert.equal((await admin('POST', '/categorias', { nombre: 'Cafés', seccion: 'cafés', tipo: 'lista' })).status, 200);
+  const r = await admin('POST', '/productos', { nombre: 'Tinto <b>grande</b>', categoria: 'cafés', precio: 3000, descripcion: 'de la casa' });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.id, 'tinto-b-grande-b');
+  const it = itemsCarta((await anon('GET', '/carta')).data).find(p => p.id === r.data.id);
+  assert.equal(it.precio, 3000); assert.equal(it.model, null);
+  assert.equal((await admin('POST', '/productos', { nombre: 'Y', categoria: 'no-existe', precio: 1 })).status, 400);
+  assert.equal((await admin('PUT', `/productos/${r.data.id}`, { modelo: '../server' })).status, 400);
+  await admin('PUT', `/productos/${r.data.id}`, { activo: false });
+  assert.equal(itemsCarta((await anon('GET', '/carta')).data).some(p => p.id === r.data.id), false);
+});
+await t('QR por mesa (solo dueño) y validación de dirección', async () => {
+  assert.equal((await caja('GET', '/qr?url=https://x.co/&mesas=2')).status, 403);
+  const q = await admin('GET', '/qr?url=' + encodeURIComponent('https://menu.ejemplo.co/') + '&mesas=3');
+  assert.equal(q.data.length, 3); assert.equal(q.data[2].url, 'https://menu.ejemplo.co/?mesa=3'); assert.ok(q.data[0].svg.startsWith('<svg'));
+  assert.equal((await admin('GET', '/qr?url=javascript:alert(1)&mesas=2')).status, 400);
+  assert.equal((await admin('GET', '/qr?url=https://x.co/&mesas=500')).status, 400);
+});
+await t('copia de seguridad descargable solo por el dueño', async () => {
+  assert.equal((await caja('GET', '/respaldo')).status, 403);
+  const r = await fetch(BASE + '/api/respaldo', { headers: { cookie: admin.cookie() } });
+  const buf = Buffer.from(await r.arrayBuffer());
+  assert.equal(r.status, 200); assert.equal(buf.subarray(0, 15).toString(), 'SQLite format 3');
 });
 await t('petición desde otro origen es bloqueada', async () => {
   const r = await fetch(BASE + '/api/logout', { method: 'POST', headers: { origin: 'https://malicioso.example' } });

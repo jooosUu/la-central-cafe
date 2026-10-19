@@ -4,12 +4,20 @@
 //   /caja/   -> app de ventas e inventario
 //   /api/... -> API JSON
 import { createServer } from 'node:http';
-import { readFile, stat } from 'node:fs/promises';
+import { readFile, stat, unlink } from 'node:fs/promises';
+import { readdirSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes } from 'node:crypto';
 import { networkInterfaces } from 'node:os';
-import { db, seed, hashPin, checkPin } from './db.mjs';
+import { db, seed, migrar, respaldoDiario, hashPin, checkPin } from './db.mjs';
+import { createRequire } from 'node:module';
+
+// generador de QR (librería qrcode, MIT, copiada en vendor/ para no depender de internet)
+const requireLocal = createRequire(import.meta.url);
+const QR = requireLocal('./vendor/qrcode/lib/core/qrcode.js');
+const QRsvg = requireLocal('./vendor/qrcode/lib/renderer/svg-tag.js');
 
 const PORT = Number(process.env.PORT || 3000);
 const ROOT_MENU = fileURLToPath(new URL('../menu/', import.meta.url));
@@ -17,6 +25,9 @@ const ROOT_APP = fileURLToPath(new URL('./public/', import.meta.url));
 const PAGOS = ['efectivo', 'nequi', 'daviplata', 'tarjeta'];
 
 if (seed()) console.log('Base de datos creada con datos iniciales (data/lacentral.db)');
+migrar();
+try { const r = respaldoDiario(); if (r) console.log('  Respaldo del día: ' + r); } catch (e) { console.error('  No se pudo hacer el respaldo diario:', e.message); }
+setInterval(() => { try { respaldoDiario(); } catch {} }, 3600_000).unref();
 
 // ---------- utilidades ----------
 const pad = n => String(n).padStart(2, '0');
@@ -30,6 +41,9 @@ const num = (v, { min = -Infinity, max = Infinity, int = false } = {}) => {
 };
 class HttpError extends Error { constructor(status, msg) { super(msg); this.status = status; } }
 const fail = (status, msg) => { throw new HttpError(status, msg); };
+const slug = t => String(t).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+const texto = (v, max) => (v == null ? '' : String(v)).trim().slice(0, max);
+const modelos = () => { try { return readdirSync(join(ROOT_MENU, 'models')).filter(f => f.endsWith('.glb')).map(f => f.slice(0, -4)).sort(); } catch { return []; } };
 
 function tx(fn) {
   db.exec('BEGIN IMMEDIATE');
@@ -59,6 +73,8 @@ function datos() {
     productos: db.prepare('SELECT * FROM productos ORDER BY orden').all(),
     insumos: db.prepare('SELECT * FROM insumos ORDER BY activo DESC, nombre').all(),
     recetas: db.prepare('SELECT * FROM recetas').all(),
+    categorias: db.prepare('SELECT * FROM categorias ORDER BY orden').all(),
+    modelos: modelos(),
   };
 }
 
@@ -183,14 +199,48 @@ function reporte(q) {
   };
 }
 
-// Carta pública para el menú digital: precios y productos agotados
+// Carta pública para el menú digital: secciones, productos, precios y agotados (todo sale de la caja)
 function carta() {
   const stock = new Map(db.prepare('SELECT id, stock FROM insumos').all().map(r => [r.id, r.stock]));
-  const recs = db.prepare(`SELECT producto_id, insumo_id, cantidad FROM recetas WHERE variante = 'base'`).all();
-  return db.prepare('SELECT id, nombre, precio, precio_combo, activo FROM productos ORDER BY orden').all().map(p => ({
-    ...p, activo: !!p.activo,
-    agotado: recs.filter(r => r.producto_id === p.id).some(r => (stock.get(r.insumo_id) ?? 0) < r.cantidad),
-  }));
+  const nombreIns = new Map(db.prepare('SELECT id, nombre FROM insumos').all().map(r => [r.id, r.nombre]));
+  const recs = db.prepare('SELECT producto_id, insumo_id, cantidad, variante FROM recetas').all();
+  const conModelo = new Set(modelos());
+  const agotado = (pid, v) => recs.filter(r => r.producto_id === pid && (r.variante === 'base' || r.variante === v))
+    .some(r => (stock.get(r.insumo_id) ?? 0) < r.cantidad);
+  const prods = db.prepare('SELECT * FROM productos WHERE activo = 1 ORDER BY orden, nombre').all();
+  const secciones = [];
+  for (const c of db.prepare('SELECT * FROM categorias ORDER BY orden').all()) {
+    const items = prods.filter(p => p.categoria === c.id).map(p => ({
+      id: p.id, nombre: p.nombre, precio: p.precio, combo: p.precio_combo ?? null, desc: p.descripcion || '',
+      model: p.modelo && conModelo.has(p.modelo) ? p.modelo : null,
+      agotado: agotado(p.id, 'base'), comboAgotado: p.precio_combo != null && agotado(p.id, 'combo'),
+      comboIncluye: recs.filter(r => r.producto_id === p.id && r.variante === 'combo').map(r => '+' + (nombreIns.get(r.insumo_id) || '').toLowerCase()),
+    }));
+    if (!items.length) continue;
+    let sec = secciones.find(x => x.titulo === c.seccion);
+    if (!sec) secciones.push(sec = { id: slug(c.seccion), titulo: c.seccion, bloques: [] });
+    sec.bloques.push({ tipo: c.tipo, id: slug(c.id), subtitulo: c.tipo === 'lista' ? c.nombre : null, items });
+  }
+  return { secciones };
+}
+
+function guardarProducto(body, actual) {
+  const nombre = body.nombre !== undefined ? texto(body.nombre, 50) || fail(400, 'Falta el nombre') : actual.nombre;
+  const categoria = body.categoria !== undefined ? String(body.categoria) : actual.categoria;
+  if (!db.prepare('SELECT id FROM categorias WHERE id = ?').get(categoria)) fail(400, 'Categoría inválida');
+  const precio = body.precio !== undefined ? num(body.precio, { min: 0, max: 10_000_000, int: true }) ?? fail(400, 'Precio inválido') : actual.precio;
+  if (precio == null) fail(400, 'Falta el precio');
+  let pc = actual.precio_combo ?? null;
+  if (body.precio_combo !== undefined) pc = body.precio_combo === null || body.precio_combo === '' ? null
+    : num(body.precio_combo, { min: 0, max: 10_000_000, int: true }) ?? fail(400, 'Precio de combo inválido');
+  const descripcion = body.descripcion !== undefined ? texto(body.descripcion, 300) || null : actual.descripcion;
+  let modelo = actual.modelo ?? null;
+  if (body.modelo !== undefined) {
+    modelo = body.modelo ? String(body.modelo) : null;
+    if (modelo && !modelos().includes(modelo)) fail(400, 'Modelo 3D no encontrado');
+  }
+  const activo = body.activo !== undefined ? (body.activo ? 1 : 0) : actual.activo;
+  return { nombre, categoria, precio, precio_combo: pc, descripcion, modelo, activo };
 }
 
 // ---------- rutas ----------
@@ -253,16 +303,53 @@ ruta('PUT', '/api/insumos/(\\d+)', ({ u, p, body }) => {
   db.prepare('UPDATE insumos SET nombre=?, unidad=?, minimo=?, costo=?, activo=? WHERE id=?').run(nombre, unidad, minimo, costo, activo, id);
   return db.prepare('SELECT * FROM insumos WHERE id = ?').get(id);
 });
+ruta('POST', '/api/productos', ({ u, body }) => {
+  requiere(u, 'admin');
+  const v = guardarProducto(body || {}, { activo: 1, precio_combo: null, descripcion: null, modelo: null });
+  const base = slug(v.nombre) || fail(400, 'Nombre inválido');
+  let id = base;
+  for (let n = 2; db.prepare('SELECT 1 FROM productos WHERE id = ?').get(id); n++) id = base + '-' + n;
+  const orden = db.prepare('SELECT COALESCE(MAX(orden), 0) + 1 o FROM productos').get().o;
+  db.prepare('INSERT INTO productos (id, nombre, categoria, precio, precio_combo, descripcion, modelo, activo, orden) VALUES (?,?,?,?,?,?,?,?,?)')
+    .run(id, v.nombre, v.categoria, v.precio, v.precio_combo, v.descripcion, v.modelo, v.activo, orden);
+  return db.prepare('SELECT * FROM productos WHERE id = ?').get(id);
+});
 ruta('PUT', '/api/productos/([a-z0-9-]+)', ({ u, p, body }) => {
   requiere(u, 'admin');
   const pr = db.prepare('SELECT * FROM productos WHERE id = ?').get(p[1]) || fail(404, 'Producto no encontrado');
-  const precio = body.precio != null ? num(body.precio, { min: 0, max: 10_000_000, int: true }) ?? fail(400, 'Precio inválido') : pr.precio;
-  let pc = pr.precio_combo;
-  if (body.precio_combo !== undefined) pc = body.precio_combo === null || body.precio_combo === '' ? null
-    : num(body.precio_combo, { min: 0, max: 10_000_000, int: true }) ?? fail(400, 'Precio de combo inválido');
-  const activo = body.activo != null ? (body.activo ? 1 : 0) : pr.activo;
-  db.prepare('UPDATE productos SET precio=?, precio_combo=?, activo=? WHERE id=?').run(precio, pc, activo, pr.id);
+  const v = guardarProducto(body || {}, pr);
+  db.prepare('UPDATE productos SET nombre=?, categoria=?, precio=?, precio_combo=?, descripcion=?, modelo=?, activo=? WHERE id=?')
+    .run(v.nombre, v.categoria, v.precio, v.precio_combo, v.descripcion, v.modelo, v.activo, pr.id);
   return db.prepare('SELECT * FROM productos WHERE id = ?').get(pr.id);
+});
+ruta('POST', '/api/categorias', ({ u, body }) => {
+  requiere(u, 'admin');
+  const nombre = texto(body?.nombre, 30) || fail(400, 'Falta el nombre');
+  const seccion = texto(body?.seccion, 30).toLowerCase() || fail(400, 'Falta la sección');
+  const tipo = body?.tipo === 'destacado' ? 'destacado' : 'lista';
+  const id = nombre.toLowerCase();
+  if (db.prepare('SELECT 1 FROM categorias WHERE id = ?').get(id)) fail(400, 'Ya existe esa categoría');
+  const orden = db.prepare('SELECT COALESCE(MAX(orden), 0) + 1 o FROM categorias').get().o;
+  db.prepare('INSERT INTO categorias (id, nombre, seccion, tipo, orden) VALUES (?,?,?,?,?)').run(id, nombre, seccion, tipo, orden);
+  return db.prepare('SELECT * FROM categorias WHERE id = ?').get(id);
+});
+ruta('GET', '/api/qr', ({ u, q }) => {
+  requiere(u, 'admin');
+  let base;
+  try { base = new URL(q.get('url') || ''); } catch { fail(400, 'Dirección del menú inválida'); }
+  if (!/^https?:$/.test(base.protocol) || base.href.length > 200) fail(400, 'Dirección del menú inválida');
+  const mesas = num(q.get('mesas'), { min: 1, max: 60, int: true }) ?? fail(400, 'Número de mesas inválido (1 a 60)');
+  return Array.from({ length: mesas }, (_, i) => {
+    const url = new URL(base); url.searchParams.set('mesa', i + 1);
+    const svg = QRsvg.render(QR.create(url.href, { errorCorrectionLevel: 'M' }), { margin: 0, color: { dark: '#000000ff', light: '#ffffffff' } });
+    return { mesa: i + 1, url: url.href, svg };
+  });
+});
+ruta('GET', '/api/respaldo', ({ u }) => {
+  requiere(u, 'admin');
+  const f = join(tmpdir(), `lacentral-respaldo-${Date.now()}.db`);
+  db.exec(`VACUUM INTO '${f.replace(/'/g, "''")}'`);
+  return { __archivo: f, nombre: `lacentral-respaldo-${hoy()}.db` };
 });
 ruta('PUT', '/api/productos/([a-z0-9-]+)/receta', ({ u, p, body }) => {
   requiere(u, 'admin');
@@ -327,6 +414,11 @@ createServer(async (req, res) => {
         try { body = raw ? JSON.parse(raw) : {}; } catch { fail(400, 'JSON inválido'); }
       }
       const out = r.fn({ req, res, body, q: url.searchParams, p: url.pathname.match(r.re), u: usuarioDe(req) });
+      if (out?.__archivo) {   // descarga de archivo (respaldo)
+        const data = await readFile(out.__archivo); await unlink(out.__archivo).catch(() => {});
+        res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Disposition': `attachment; filename="${out.nombre}"`, 'Cache-Control': 'no-store' });
+        return res.end(data);
+      }
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
       return res.end(JSON.stringify(out));
     }

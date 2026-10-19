@@ -1,6 +1,6 @@
 // Base de datos SQLite (node:sqlite, sin dependencias) + datos iniciales.
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, mkdirSync, readdirSync, unlinkSync } from 'node:fs';
 import { scryptSync, randomBytes, timingSafeEqual } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
@@ -103,4 +103,42 @@ export function seed() {
     db.exec('COMMIT');
   } catch (e) { db.exec('ROLLBACK'); throw e; }
   return true;
+}
+
+// ---------- migraciones (se aplican sobre bases existentes sin perder datos) ----------
+export function migrar() {
+  const cols = db.prepare('PRAGMA table_info(productos)').all().map(c => c.name);
+  if (!cols.includes('descripcion')) db.exec('ALTER TABLE productos ADD COLUMN descripcion TEXT');
+  if (!cols.includes('modelo')) db.exec('ALTER TABLE productos ADD COLUMN modelo TEXT');
+  db.exec(`CREATE TABLE IF NOT EXISTS categorias (
+    id TEXT PRIMARY KEY, nombre TEXT NOT NULL, seccion TEXT NOT NULL,
+    tipo TEXT NOT NULL CHECK (tipo IN ('destacado','lista')), orden INTEGER NOT NULL DEFAULT 0)`);
+  if (db.prepare('SELECT COUNT(*) n FROM categorias').get().n === 0) {
+    const ic = db.prepare('INSERT INTO categorias (id, nombre, seccion, tipo, orden) VALUES (?,?,?,?,?)');
+    [['choripan', 'Choripan', 'choripan', 'destacado'], ['adiciones', 'Adiciones', 'choripan', 'lista'],
+     ['cervezas', 'Cervezas', 'bebidas', 'lista'], ['sin alcohol', 'Sin alcohol', 'bebidas', 'lista']]
+      .forEach((c, i) => ic.run(...c, i));
+    // descripciones y modelos 3D de los productos iniciales
+    const desc = {
+      choripan: 'Pan baguette de ajo, chorizo artesanal asado a la parrilla, chimichurri de la casa y ese sabor ahumado que nos representa.',
+      'chori-doble': 'Pan baguette de ajo, doble chorizo artesanal asado a la parrilla, chimichurri de la casa y ese sabor ahumado que nos representa.',
+    };
+    for (const p of db.prepare('SELECT id FROM productos').all()) {
+      db.prepare('UPDATE productos SET modelo = COALESCE(modelo, ?), descripcion = COALESCE(descripcion, ?) WHERE id = ?')
+        .run(p.id, desc[p.id] ?? null, p.id);
+    }
+  }
+}
+
+// ---------- copia de seguridad diaria automática (data/respaldos, se guardan 14) ----------
+export function respaldoDiario() {
+  if (process.env.LACENTRAL_DB) return null;           // no respaldar bases de prueba
+  const dir = new URL('respaldos/', DATA);
+  mkdirSync(dir, { recursive: true });
+  const d = new Date(), f = `lacentral-${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}.db`;
+  const destino = fileURLToPath(new URL(f, dir));
+  if (!existsSync(destino)) db.exec(`VACUUM INTO '${destino.replace(/'/g, "''")}'`);
+  const viejos = readdirSync(dir).filter(x => /^lacentral-\d{4}-\d{2}-\d{2}\.db$/.test(x)).sort().slice(0, -14);
+  for (const v of viejos) unlinkSync(new URL(v, dir));
+  return destino;
 }

@@ -34,8 +34,25 @@ El menú digital lee los precios de la caja y marca **agotado** cuando no alcanz
 
 > Los insumos, cantidades y costos iniciales son **valores de prueba**: ajústalos con los reales.
 
+## El menú sale de la caja
+En **ajustes** el dueño puede:
+- **+ producto**: nombre, categoría, precio, precio de combo, descripción y modelo 3D. Aparece solo en el menú y en la caja.
+  Después de crearlo, define su **receta** (qué insumos descuenta).
+- **+ categoría**: por ejemplo "Cafés calientes" dentro de la sección "cafés". Se elige si se ve como lista
+  (con puntos guía) o como platos grandes con foto 3D y combo.
+- **editar** cualquier producto o sacarlo de venta (desaparece del menú sin borrarse).
+- **códigos QR de las mesas**: escribe la dirección del menú y cuántas mesas; salen listos para imprimir.
+
+El combo muestra automáticamente lo que incluye según su receta (ej. "+papa criolla +coca-cola zero 250ml").
+El menú queda guardado en el celular del cliente: abre rápido y funciona aunque la señal sea mala.
+
 ## Copia de seguridad
-Todo queda en `data/lacentral.db`. Copia ese archivo (con la caja apagada) a una USB o a la nube.
+- **Automática**: cada día en `data/respaldos/` (se guardan los últimos 14 días).
+- **Manual**: ajustes → *descargar copia de seguridad*. Guárdala en una USB o en la nube.
+- Para restaurar: con la caja apagada, reemplaza `data/lacentral.db` por la copia (renómbrala a `lacentral.db`).
+
+> Recomendado: no tener la carpeta `data` dentro de una unidad sincronizada (Google Drive, OneDrive)
+> mientras la caja está encendida; la sincronización puede chocar con la base de datos. Usa las copias en su lugar.
 
 ## Pruebas
 ```

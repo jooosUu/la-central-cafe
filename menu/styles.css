@@ -192,3 +192,10 @@ img { max-width: 100%; }
   html { scroll-behavior: auto; }
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* productos sin modelo 3D (creados desde la caja) */
+.foto-vacia { display: grid; place-items: center; cursor: default; }
+.foto-vacia .marca { width: 26%; max-width: 120px; opacity: .14; }
+.foto-vacia .marca svg { width: 100%; height: auto; display: block; }
+.precios2.uno { grid-template-columns: 1fr; }
+.b3d.vacio { visibility: hidden; }

@@ -206,7 +206,7 @@ button.tile:active { transform: scale(.97); background: var(--ink); color: var(-
 .switch input:checked + i::after { background: var(--bg); transform: translateX(22px); }
 .switch input:focus-visible + i { outline: 3px solid var(--ink); outline-offset: 2px; }
 .r-fila { display: grid; grid-template-columns: 1fr 90px auto; gap: var(--s2); margin-bottom: var(--s2); }
-.fila2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s3); }
+.fila2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s3); align-items: end; }
 .check { display: flex; gap: 8px; align-items: center; font-weight: 800; }
 
 /* ---------- modal & toast ---------- */
@@ -274,7 +274,7 @@ dialog::backdrop { background: rgba(0, 0, 0, .55); }
   /* tabla de productos como tarjetas */
   .tabla-prod thead { display: none; }
   .tabla-prod, .tabla-prod tbody { display: block; }
-  .tabla-prod tr { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; padding: 14px 0; border-bottom: 1px solid var(--line); align-items: end; }
+  .tabla-prod tr { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px 10px; padding: 12px 0; border-bottom: 1px solid var(--line); align-items: end; }
   .tabla-prod td { border: 0; padding: 0; text-align: left; }
   .tabla-prod td:first-child { grid-column: 1 / -1; }
   .tabla-prod td[data-l]::before { content: attr(data-l); display: block; font: 800 12px/1 Utendo; margin-bottom: 6px; }
@@ -302,3 +302,29 @@ dialog::backdrop { background: rgba(0, 0, 0, .55); }
   #cierre-print input { border: 0; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+/* ---------- ajustes v2: productos, QR ---------- */
+.sub-head { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--s3); flex-wrap: wrap; margin: var(--s6) 0 var(--s2); }
+.sub-head .sub { margin: 0; }
+.tabla-prod td.acc { white-space: nowrap; }
+.campo textarea { border: var(--ring) solid var(--ink); border-radius: 12px; padding: 10px 14px; font: 500 16px/1.35 Utendo; resize: vertical; width: 100%; }
+.qr-form { display: grid; grid-template-columns: 1fr 110px auto; gap: var(--s3); align-items: end; max-width: 720px; }
+.qr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: var(--s4); }
+.qr-card { border: var(--ring) solid var(--ink); border-radius: 18px; padding: var(--s4); display: flex; flex-direction: column; align-items: center; gap: var(--s3); break-inside: avoid; }
+.qr-logo { width: 120px; line-height: 0; } .qr-logo svg { width: 100%; height: auto; color: var(--ink); }
+.qr-code { width: 100%; max-width: 150px; line-height: 0; } .qr-code svg { width: 100%; height: auto; }
+.qr-card figcaption { text-align: center; display: flex; flex-direction: column; gap: 2px; }
+.qr-card b { font: 800 26px/1 Utendo; } .qr-card span { font-size: 12px; color: var(--mute); }
+@media (max-width: 600px) {
+  .qr-form { grid-template-columns: 1fr 90px; }
+  .qr-form .btn { grid-column: 1 / -1; }
+  .tabla-prod td.acc { grid-column: 1 / -1; display: flex; gap: 4px; margin-top: -4px; }
+  .tabla-prod .btn-sm.link { min-height: 32px; padding: 0 8px 0 0; }
+}
+@media print {
+  .imprimible, .imprimible * { visibility: visible; }
+  .imprimible { position: absolute; inset: 0; padding: 12mm; }
+  .qr-grid { grid-template-columns: repeat(3, 1fr); gap: 8mm; }
+  dialog#modal { position: static; box-shadow: none; max-height: none; width: 100%; border: 0; }
+  dialog#modal .m-body { max-height: none; overflow: visible; }
+}
