@@ -23,6 +23,7 @@ const PORT = Number(process.env.PORT || 3000);
 const ROOT_MENU = fileURLToPath(new URL('../menu/', import.meta.url));
 const ROOT_APP = fileURLToPath(new URL('./public/', import.meta.url));
 const PAGOS = ['efectivo', 'nequi', 'daviplata', 'tarjeta'];
+const TRAS_PROXY = process.env.TRAS_PROXY === '1';   // en Render/hosting: la IP y https vienen del proxy
 
 if (seed()) console.log('Base de datos creada con datos iniciales (data/lacentral.db)');
 migrar();
@@ -251,7 +252,7 @@ ruta('GET', '/api/carta', () => carta());
 ruta('GET', '/api/usuarios-login', () => db.prepare('SELECT usuario, nombre FROM usuarios WHERE activo = 1 ORDER BY rol, nombre').all());
 ruta('GET', '/api/sesion', ({ u }) => (requiere(u), u));
 ruta('POST', '/api/login', ({ body, req, res }) => {
-  const ip = req.socket.remoteAddress, t = Date.now();
+  const ip = (TRAS_PROXY && String(req.headers['x-forwarded-for'] || '').split(',')[0].trim()) || req.socket.remoteAddress, t = Date.now();
   const lista = (intentos.get(ip) || []).filter(x => t - x < 60_000);
   if (lista.length >= 6) fail(429, 'Demasiados intentos. Espera un minuto.');
   const row = db.prepare('SELECT * FROM usuarios WHERE usuario = ? AND activo = 1').get(String(body?.usuario || ''));
@@ -262,7 +263,8 @@ ruta('POST', '/api/login', ({ body, req, res }) => {
   intentos.delete(ip);
   const sid = randomBytes(24).toString('hex');
   sesiones.set(sid, { uid: row.id, exp: t + SESION_MS });
-  res.setHeader('Set-Cookie', `sid=${sid}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${SESION_MS / 1000}`);
+  const segura = TRAS_PROXY && req.headers['x-forwarded-proto'] === 'https' ? '; Secure' : '';
+  res.setHeader('Set-Cookie', `sid=${sid}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${SESION_MS / 1000}${segura}`);
   return { id: row.id, usuario: row.usuario, nombre: row.nombre, rol: row.rol };
 });
 ruta('POST', '/api/logout', ({ req, res }) => {

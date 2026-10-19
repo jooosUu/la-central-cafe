@@ -2,9 +2,13 @@
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync, existsSync, mkdirSync, readdirSync, unlinkSync } from 'node:fs';
 import { scryptSync, randomBytes, timingSafeEqual } from 'node:crypto';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const DATA = new URL('./data/', import.meta.url);
+// Carpeta de datos: app/data en el computador; en el servidor, el disco persistente (LACENTRAL_DATA=/var/data)
+const DATA = process.env.LACENTRAL_DATA
+  ? pathToFileURL(process.env.LACENTRAL_DATA.replace(/[\\/]*$/, '/'))
+  : new URL('./data/', import.meta.url);
+mkdirSync(DATA, { recursive: true });
 export const db = new DatabaseSync(process.env.LACENTRAL_DB || fileURLToPath(new URL('lacentral.db', DATA)));
 db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
 
@@ -51,9 +55,16 @@ export function checkPin(pin, stored) {
 // ---------- datos iniciales (solo si la base está vacía) ----------
 export function seed() {
   if (db.prepare('SELECT COUNT(*) n FROM productos').get().n > 0) return false;
+  // Usuarios iniciales: del archivo local de prueba, o de variables de entorno en el servidor
   const file = new URL('usuarios-iniciales.json', DATA);
-  if (!existsSync(file)) throw new Error('Falta data/usuarios-iniciales.json para crear los usuarios iniciales');
-  const { usuarios } = JSON.parse(readFileSync(file, 'utf8'));
+  let usuarios;
+  if (existsSync(file)) usuarios = JSON.parse(readFileSync(file, 'utf8')).usuarios;
+  else {
+    const env = { dueno: process.env.PIN_DUENO, caja1: process.env.PIN_CAJA1, caja2: process.env.PIN_CAJA2 };
+    for (const [k, v] of Object.entries(env)) if (!/^\d{4,8}$/.test(v || '')) throw new Error(`Falta la variable PIN_${k.toUpperCase()} (4 a 8 números) para crear los usuarios iniciales`);
+    usuarios = [{ usuario: 'dueno', nombre: 'Dueño', rol: 'admin', pin: env.dueno },
+      { usuario: 'caja1', nombre: 'Caja 1', rol: 'cajero', pin: env.caja1 }, { usuario: 'caja2', nombre: 'Caja 2', rol: 'cajero', pin: env.caja2 }];
+  }
 
   db.exec('BEGIN');
   try {

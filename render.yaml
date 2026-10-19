@@ -1,0 +1,30 @@
+# Despliegue en Render (https://render.com) con un clic: New + → Blueprint → elegir este repo.
+# Un solo servicio sirve el menú en "/" y la caja en "/caja/". La base de datos vive en un disco persistente.
+services:
+  - type: web
+    name: lacentral
+    runtime: node
+    plan: starter            # el disco persistente requiere un plan de pago (el gratis borra los datos al reiniciar)
+    region: oregon
+    buildCommand: echo "sin dependencias que instalar"
+    startCommand: node app/server.mjs
+    healthCheckPath: /api/carta
+    autoDeploy: true
+    disk:
+      name: datos
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: LACENTRAL_DATA
+        value: /var/data
+      - key: TRAS_PROXY
+        value: "1"
+      # PIN iniciales (4 a 8 números). Render los pide al crear el servicio; luego se cambian en Ajustes.
+      - key: PIN_DUENO
+        sync: false
+      - key: PIN_CAJA1
+        sync: false
+      - key: PIN_CAJA2
+        sync: false

@@ -1,0 +1,12 @@
+{
+  "name": "lacentral-cafe",
+  "version": "1.0.0",
+  "private": true,
+  "description": "La Central Café: menú digital 3D/AR + caja, inventario y ventas",
+  "type": "module",
+  "engines": { "node": ">=22.5" },
+  "scripts": {
+    "start": "node app/server.mjs",
+    "test": "node app/test.mjs"
+  }
+}
