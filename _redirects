@@ -1,0 +1,7 @@
+/            /menu/              302
+/caja        /app/public/        302
+/caja/*      /app/public/:splat  302
+/comanda     /app/public/        302
+/comanda/*   /app/public/:splat  302
+/img/*       /menu/img/:splat    200
+/fonts/*     /menu/fonts/:splat  200
