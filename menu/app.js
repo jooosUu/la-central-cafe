@@ -14,8 +14,36 @@ let MENU = MENU_FIJO.map(sec => ({ ...sec, bloques: sec.bloques.map(b => ({ ...b
 try {
   const ctrl = new AbortController(); setTimeout(() => ctrl.abort(), 3000);
   const r = await fetch('/api/carta', { signal: ctrl.signal, cache: 'no-store' });
-  if (r.ok) { const d = await r.json(); if (d.secciones?.length) MENU = d.secciones; }
-} catch { /* sin servidor: menú fijo */ }
+  if (r.ok) {
+    const d = await r.json();
+    if (d.secciones?.length) MENU = d.secciones;
+  } else {
+    aplicarDemoStore();
+  }
+} catch {
+  aplicarDemoStore();
+}
+
+function aplicarDemoStore() {
+  try {
+    const localStore = localStorage.getItem('lc_demo_store');
+    if (!localStore) return;
+    const ds = JSON.parse(localStore);
+    if (!ds?.productos?.length) return;
+    for (const sec of MENU) {
+      for (const b of sec.bloques) {
+        for (const it of b.items) {
+          const found = ds.productos.find(p => p.id === it.id);
+          if (found) {
+            it.precio = found.precio;
+            if (found.precio_combo) it.combo = found.precio_combo;
+            it.agotado = !found.activo;
+          }
+        }
+      }
+    }
+  } catch {}
+}
 // ---------- marca (SVGs exportados del .ai, heredan el color con currentColor) ----------
 svg('img/logo-horizontal.svg').then(s => { $('#logo').innerHTML = s; $('#foot-logo').innerHTML = s; });
 Promise.all(['corazon', 'fuego', 'rapido', 'cafe'].map(n => svg(`img/icono-${n}.svg`))).then(list => {
