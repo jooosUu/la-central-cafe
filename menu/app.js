@@ -116,18 +116,26 @@ for (const sec of MENU) {
 document.querySelectorAll('[data-svg]').forEach(async e => { e.innerHTML = await svg(e.dataset.svg); });
 
 // pestaña activa según scroll
-const targets = [...tabs.querySelectorAll('.tab')].map(t => document.getElementById(t.dataset.cat));
+const targets = [...tabs.querySelectorAll('.tab')].map(t => document.getElementById(t.dataset.cat)).filter(Boolean);
 const marcar = () => {
   const y = innerHeight * 0.35;
   let cur = targets[0];
-  for (const t of targets) if (t.getBoundingClientRect().top <= y) cur = t;
+  for (const t of targets) {
+    if (t.getBoundingClientRect().top <= y) cur = t;
+  }
+  if (!cur) return;
   tabs.querySelectorAll('.tab').forEach(t => {
     const on = t.dataset.cat === cur.id;
-    if (on && !t.classList.contains('on')) t.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+    if (on && !t.classList.contains('on')) {
+      // Centra la pestaña activa solo horizontalmente dentro de su barra, sin alterar el scroll vertical de la ventana
+      const targetLeft = t.offsetLeft - (tabs.clientWidth - t.offsetWidth) / 2;
+      tabs.scrollTo({ left: targetLeft, behavior: 'smooth' });
+    }
     t.classList.toggle('on', on);
   });
 };
-addEventListener('scroll', marcar, { passive: true }); marcar();
+addEventListener('scroll', marcar, { passive: true });
+marcar();
 
 // ---------- visor 3D / AR ----------
 const visor = $('#visor'), mv = $('#mv');
