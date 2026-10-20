@@ -1,15 +1,25 @@
-# Publicar La Central en internet (menú + caja en un solo lugar)
+# Publicar La Central en internet (menú + caja/comanda en un solo lugar)
 
-Todo este repositorio se publica como **un solo servicio**:
+Todo este repositorio se publica como **un solo proyecto/servicio** (en Vercel o Render):
 
-| Qué | Dirección |
-|---|---|
-| Menú (lo que abren los clientes con el QR) | `https://TU-SERVICIO.onrender.com/` |
-| Caja, inventario y ventas | `https://TU-SERVICIO.onrender.com/caja/` |
+| Qué | En Vercel | En Render |
+|---|---|---|
+| **Menú digital** (clientes con QR / 3D / AR) | `https://TU-APP.vercel.app/` | `https://TU-APP.onrender.com/` |
+| **Caja y comanda** (pedidos, ventas, inventario) | `https://TU-APP.vercel.app/caja/` | `https://TU-APP.onrender.com/caja/` |
+
+> En la misma página puedes alternar entre el menú y la caja con los botones integrados en el encabezado y navegación.
 
 ## 1. Subir a GitHub
-Sube esta carpeta completa al repo `jooosUu/cafe-lacentral` (rama `main`).
-Git ya excluye la base de datos, los PIN de prueba y las copias de seguridad.
+Sube esta carpeta al repositorio `jooosUu/la-central-cafe` (rama `main`).
+
+## 2. Publicar en Vercel (Recomendado para demo/web)
+1. Entra a [vercel.com](https://vercel.com) e inicia sesión con tu GitHub.
+2. Haz clic en **Add New...** → **Project**.
+3. Importa el repositorio `la-central-cafe`.
+4. En la configuración del proyecto, deja todo por defecto (`vercel.json` se encarga de las rutas automáticamente).
+5. Haz clic en **Deploy**. En menos de 1 minuto estará en línea.
+   - Accede a `/` para ver el Menú de clientes.
+   - Accede a `/caja` o `/comanda` para ver la App de Comandas. En modo demo online usa el PIN `1234`.
 
 ## 2. Crear el servicio en Render (una sola vez)
 1. Entra a https://render.com e inicia sesión **con tu cuenta de GitHub**.

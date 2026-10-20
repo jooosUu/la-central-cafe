@@ -1,0 +1,36 @@
+{
+  "version": 2,
+  "cleanUrls": true,
+  "rewrites": [
+    { "source": "/caja", "destination": "/app/public/index.html" },
+    { "source": "/caja/", "destination": "/app/public/index.html" },
+    { "source": "/caja/:path*", "destination": "/app/public/:path*" },
+    { "source": "/comanda", "destination": "/app/public/index.html" },
+    { "source": "/comanda/", "destination": "/app/public/index.html" },
+    { "source": "/comanda/:path*", "destination": "/app/public/:path*" },
+    { "source": "/img/:path*", "destination": "/menu/img/:path*" },
+    { "source": "/fonts/:path*", "destination": "/menu/fonts/:path*" },
+    { "source": "/models/:path*", "destination": "/menu/models/:path*" },
+    { "source": "/vendor/:path*", "destination": "/menu/vendor/:path*" },
+    { "source": "/menu", "destination": "/menu/index.html" },
+    { "source": "/menu/", "destination": "/menu/index.html" },
+    { "source": "/menu/:path*", "destination": "/menu/:path*" },
+    { "source": "/", "destination": "/menu/index.html" },
+    { "source": "/:path*", "destination": "/menu/:path*" }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "Referrer-Policy", "value": "same-origin" }
+      ]
+    },
+    {
+      "source": "/(fonts|models|img)/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=86400, stale-while-revalidate=604800" }
+      ]
+    }
+  ]
+}
