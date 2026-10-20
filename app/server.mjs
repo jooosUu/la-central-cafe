@@ -424,7 +424,7 @@ createServer(async (req, res) => {
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
       return res.end(JSON.stringify(out));
     }
-    if (url.pathname === '/caja') { res.writeHead(301, { Location: '/caja/' }); return res.end(); }
+    if (url.pathname === '/caja' || url.pathname === '/comanda' || url.pathname === '/comanda/') { res.writeHead(301, { Location: '/caja/' }); return res.end(); }
     if (url.pathname.startsWith('/caja/') && await estatico(res, ROOT_APP, url.pathname.slice(6))) return;
     if (!url.pathname.startsWith('/caja/') && await estatico(res, ROOT_MENU, url.pathname.slice(1))) return;
     res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); res.end('No encontrado');

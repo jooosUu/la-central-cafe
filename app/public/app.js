@@ -6,14 +6,346 @@ const cop = n => '$' + Math.round(n || 0).toLocaleString('es-CO');
 const numf = n => (Math.round(n * 100) / 100).toLocaleString('es-CO');
 const PAGOS = { efectivo: 'Efectivo', nequi: 'Nequi', daviplata: 'Daviplata', tarjeta: 'Tarjeta' };
 
+// ---------- Almacenamiento y fallback demo (para Vercel y modo sin backend) ----------
+let modoDemo = false;
+
+function activarModoDemo() {
+  if (modoDemo) return;
+  modoDemo = true;
+  const hint = $('#demo-badge-text');
+  if (hint) hint.hidden = false;
+}
+
+const SEED_USUARIOS = [
+  { id: 1, usuario: 'dueno', nombre: 'Dueño', rol: 'admin', pin: '1234' },
+  { id: 2, usuario: 'caja1', nombre: 'Caja 1', rol: 'cajero', pin: '1111' },
+  { id: 3, usuario: 'caja2', nombre: 'Caja 2', rol: 'cajero', pin: '1699' }
+];
+
+const SEED_CATEGORIAS = [
+  { id: 'choripan', nombre: 'Choripan', seccion: 'choripan', tipo: 'destacado', orden: 1 },
+  { id: 'adiciones', nombre: 'Adiciones', seccion: 'choripan', tipo: 'lista', orden: 2 },
+  { id: 'cervezas', nombre: 'Cervezas', seccion: 'bebidas', tipo: 'lista', orden: 3 },
+  { id: 'sin-alcohol', nombre: 'Sin alcohol', seccion: 'bebidas', tipo: 'lista', orden: 4 }
+];
+
+const SEED_INSUMOS = [
+  { id: 1, nombre: 'Pan baguette de ajo', unidad: 'und', stock: 40, minimo: 10, costo: 1800, activo: 1 },
+  { id: 2, nombre: 'Chorizo artesanal', unidad: 'und', stock: 60, minimo: 15, costo: 3200, activo: 1 },
+  { id: 3, nombre: 'Chimichurri', unidad: 'porción', stock: 50, minimo: 10, costo: 400, activo: 1 },
+  { id: 4, nombre: 'Papa criolla', unidad: 'porción', stock: 30, minimo: 8, costo: 900, activo: 1 },
+  { id: 5, nombre: 'Aguacate', unidad: 'porción', stock: 20, minimo: 5, costo: 900, activo: 1 },
+  { id: 6, nombre: 'Queso', unidad: 'porción', stock: 25, minimo: 5, costo: 800, activo: 1 },
+  { id: 7, nombre: 'Coca-Cola Zero 250ml', unidad: 'und', stock: 24, minimo: 6, costo: 1500, activo: 1 },
+  { id: 8, nombre: 'Stella Artois', unidad: 'und', stock: 24, minimo: 6, costo: 3800, activo: 1 },
+  { id: 9, nombre: 'Solecita', unidad: 'und', stock: 24, minimo: 6, costo: 2600, activo: 1 },
+  { id: 10, nombre: 'Coronita', unidad: 'und', stock: 24, minimo: 6, costo: 2600, activo: 1 },
+  { id: 11, nombre: 'Aguila', unidad: 'und', stock: 30, minimo: 6, costo: 2000, activo: 1 },
+  { id: 12, nombre: 'Poker', unidad: 'und', stock: 30, minimo: 6, costo: 2000, activo: 1 },
+  { id: 13, nombre: 'Coca-Cola 250ml', unidad: 'und', stock: 24, minimo: 6, costo: 1500, activo: 1 },
+  { id: 14, nombre: 'Coca-Cola 400ml', unidad: 'und', stock: 24, minimo: 6, costo: 2400, activo: 1 },
+  { id: 15, nombre: 'Soda HATSU', unidad: 'und', stock: 12, minimo: 4, costo: 2700, activo: 1 },
+  { id: 16, nombre: 'Te HATSU', unidad: 'und', stock: 12, minimo: 4, costo: 4200, activo: 1 },
+  { id: 17, nombre: 'Agua 600ml', unidad: 'und', stock: 24, minimo: 6, costo: 1500, activo: 1 }
+];
+
+const SEED_PRODUCTOS = [
+  { id: 'choripan', nombre: 'Choripan', categoria: 'choripan', precio: 13000, precio_combo: 17000, activo: 1, orden: 1, modelo: 'choripan', descripcion: 'Pan baguette de ajo, chorizo artesanal asado a la parrilla, chimichurri de la casa y ese sabor ahumado que nos representa.' },
+  { id: 'chori-doble', nombre: 'Chori-doble', categoria: 'choripan', precio: 20000, precio_combo: 24000, activo: 1, orden: 2, modelo: 'chori-doble', descripcion: 'Pan baguette de ajo, doble chorizo artesanal asado a la parrilla, chimichurri de la casa y ese sabor ahumado que nos representa.' },
+  { id: 'aguacate', nombre: 'Aguacate', categoria: 'adiciones', precio: 2000, precio_combo: null, activo: 1, orden: 3, modelo: 'aguacate' },
+  { id: 'queso', nombre: 'Queso', categoria: 'adiciones', precio: 2000, precio_combo: null, activo: 1, orden: 4, modelo: 'queso' },
+  { id: 'stella', nombre: 'Stella Artois', categoria: 'cervezas', precio: 6000, precio_combo: null, activo: 1, orden: 5, modelo: 'stella' },
+  { id: 'solecita', nombre: 'Solecita', categoria: 'cervezas', precio: 4500, precio_combo: null, activo: 1, orden: 6, modelo: 'solecita' },
+  { id: 'coronita', nombre: 'Coronita', categoria: 'cervezas', precio: 4500, precio_combo: null, activo: 1, orden: 7, modelo: 'coronita' },
+  { id: 'aguila', nombre: 'Aguila', categoria: 'cervezas', precio: 3500, precio_combo: null, activo: 1, orden: 8, modelo: 'aguila' },
+  { id: 'poker', nombre: 'Poker', categoria: 'cervezas', precio: 3500, precio_combo: null, activo: 1, orden: 9, modelo: 'poker' },
+  { id: 'coca-250', nombre: 'Coca-Cola 250ml', categoria: 'sin-alcohol', precio: 2500, precio_combo: null, activo: 1, orden: 10, modelo: 'coca-250' },
+  { id: 'coca-400', nombre: 'Coca-Cola 400ml', categoria: 'sin-alcohol', precio: 4000, precio_combo: null, activo: 1, orden: 11, modelo: 'coca-400' },
+  { id: 'soda-hatsu', nombre: 'Soda HATSU', categoria: 'sin-alcohol', precio: 4500, precio_combo: null, activo: 1, orden: 12, modelo: 'soda-hatsu' },
+  { id: 'te-hatsu', nombre: 'Te HATSU', categoria: 'sin-alcohol', precio: 7000, precio_combo: null, activo: 1, orden: 13, modelo: 'te-hatsu' },
+  { id: 'agua', nombre: 'Agua 600ml', categoria: 'sin-alcohol', precio: 3000, precio_combo: null, activo: 1, orden: 14, modelo: 'agua' }
+];
+
+const SEED_RECETAS = [
+  { producto_id: 'choripan', insumo_id: 1, variante: 'base', cantidad: 1 },
+  { producto_id: 'choripan', insumo_id: 2, variante: 'base', cantidad: 1 },
+  { producto_id: 'choripan', insumo_id: 3, variante: 'base', cantidad: 1 },
+  { producto_id: 'choripan', insumo_id: 4, variante: 'combo', cantidad: 1 },
+  { producto_id: 'choripan', insumo_id: 7, variante: 'combo', cantidad: 1 },
+  { producto_id: 'chori-doble', insumo_id: 1, variante: 'base', cantidad: 1 },
+  { producto_id: 'chori-doble', insumo_id: 2, variante: 'base', cantidad: 2 },
+  { producto_id: 'chori-doble', insumo_id: 3, variante: 'base', cantidad: 1 },
+  { producto_id: 'chori-doble', insumo_id: 4, variante: 'combo', cantidad: 1 },
+  { producto_id: 'chori-doble', insumo_id: 7, variante: 'combo', cantidad: 1 },
+  { producto_id: 'aguacate', insumo_id: 5, variante: 'base', cantidad: 1 },
+  { producto_id: 'queso', insumo_id: 6, variante: 'base', cantidad: 1 },
+  { producto_id: 'stella', insumo_id: 8, variante: 'base', cantidad: 1 },
+  { producto_id: 'solecita', insumo_id: 9, variante: 'base', cantidad: 1 },
+  { producto_id: 'coronita', insumo_id: 10, variante: 'base', cantidad: 1 },
+  { producto_id: 'aguila', insumo_id: 11, variante: 'base', cantidad: 1 },
+  { producto_id: 'poker', insumo_id: 12, variante: 'base', cantidad: 1 },
+  { producto_id: 'coca-250', insumo_id: 13, variante: 'base', cantidad: 1 },
+  { producto_id: 'coca-400', insumo_id: 14, variante: 'base', cantidad: 1 },
+  { producto_id: 'soda-hatsu', insumo_id: 15, variante: 'base', cantidad: 1 },
+  { producto_id: 'te-hatsu', insumo_id: 16, variante: 'base', cantidad: 1 },
+  { producto_id: 'agua', insumo_id: 17, variante: 'base', cantidad: 1 }
+];
+
+const SEED_MODELOS = ['choripan', 'chori-doble', 'aguacate', 'queso', 'stella', 'solecita', 'coronita', 'aguila', 'poker', 'coca-250', 'coca-400', 'soda-hatsu', 'te-hatsu', 'agua'];
+
+function getDemoStore() {
+  let s = localStorage.getItem('lc_demo_store');
+  if (!s) {
+    const init = {
+      productos: SEED_PRODUCTOS,
+      insumos: SEED_INSUMOS,
+      recetas: SEED_RECETAS,
+      categorias: SEED_CATEGORIAS,
+      modelos: SEED_MODELOS,
+      ventas: [],
+      movimientos: []
+    };
+    localStorage.setItem('lc_demo_store', JSON.stringify(init));
+    return init;
+  }
+  try { return JSON.parse(s); } catch { return { productos: SEED_PRODUCTOS, insumos: SEED_INSUMOS, recetas: SEED_RECETAS, categorias: SEED_CATEGORIAS, modelos: SEED_MODELOS, ventas: [], movimientos: [] }; }
+}
+
+function saveDemoStore(store) {
+  localStorage.setItem('lc_demo_store', JSON.stringify(store));
+}
+
+async function mockApi(method, path, body) {
+  activarModoDemo();
+  const store = getDemoStore();
+  
+  if (method === 'GET' && path === '/sesion') {
+    const raw = localStorage.getItem('lc_demo_u');
+    if (!raw) {
+      const err = new Error('Inicia sesión');
+      err.status = 401;
+      throw err;
+    }
+    return JSON.parse(raw);
+  }
+  
+  if (method === 'GET' && path === '/usuarios-login') {
+    return SEED_USUARIOS.map(u => ({ id: u.id, usuario: u.usuario, nombre: u.nombre, rol: u.rol }));
+  }
+  
+  if (method === 'POST' && path === '/login') {
+    const u = SEED_USUARIOS.find(x => x.usuario === body?.usuario);
+    if (!u) throw new Error('Usuario inválido');
+    const p = String(body?.pin || '');
+    if (p !== u.pin && p !== '1234' && p !== '6225' && p !== '1111' && p !== '1457') {
+      throw new Error('PIN incorrecto (en demo usa 1234)');
+    }
+    const session = { id: u.id, usuario: u.usuario, nombre: u.nombre, rol: u.rol };
+    localStorage.setItem('lc_demo_u', JSON.stringify(session));
+    return session;
+  }
+  
+  if (method === 'POST' && path === '/logout') {
+    localStorage.removeItem('lc_demo_u');
+    return { ok: true };
+  }
+  
+  if (method === 'GET' && path === '/datos') {
+    return {
+      productos: store.productos,
+      insumos: store.insumos,
+      recetas: store.recetas,
+      categorias: store.categorias,
+      modelos: store.modelos
+    };
+  }
+  
+  if (method === 'POST' && path === '/ventas') {
+    const items = body?.items || [];
+    if (!items.length) throw new Error('La venta no tiene productos');
+    let total = 0;
+    const lineas = [];
+    for (const it of items) {
+      const p = store.productos.find(x => x.id === it.producto_id);
+      if (!p) throw new Error('Producto no encontrado');
+      const varCombo = it.variante === 'combo';
+      const precio = varCombo ? (p.precio_combo || p.precio) : p.precio;
+      const sub = precio * it.cantidad;
+      total += sub;
+      lineas.push({
+        producto_id: p.id,
+        nombre: p.nombre + (varCombo ? ' (combo)' : ''),
+        variante: it.variante || 'base',
+        cantidad: it.cantidad,
+        precio
+      });
+      const rec = store.recetas.filter(r => r.producto_id === p.id && (r.variante === 'base' || r.variante === it.variante));
+      for (const r of rec) {
+        const ins = store.insumos.find(i => i.id === r.insumo_id);
+        if (ins) ins.stock = Math.max(0, Math.round((ins.stock - r.cantidad * it.cantidad) * 100) / 100);
+      }
+    }
+    const recibido = Number(body?.recibido || 0);
+    const cambio = body?.pago === 'efectivo' && recibido >= total ? recibido - total : 0;
+    const pad = n => String(n).padStart(2, '0');
+    const d = new Date();
+    const fecha = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    const venta = {
+      id: Date.now(),
+      fecha,
+      total,
+      pago: body.pago,
+      recibido: recibido || null,
+      anulada: 0,
+      items: lineas
+    };
+    store.ventas.unshift(venta);
+    saveDemoStore(store);
+    return { id: venta.id, total, cambio };
+  }
+  
+  if (method === 'GET' && path.startsWith('/ventas')) {
+    return store.ventas;
+  }
+  
+  if (method === 'POST' && path.match(/^\/ventas\/(\d+)\/anular$/)) {
+    const id = Number(path.match(/^\/ventas\/(\d+)\/anular$/)[1]);
+    const v = store.ventas.find(x => x.id === id);
+    if (!v) throw new Error('Venta no encontrada');
+    v.anulada = 1;
+    saveDemoStore(store);
+    return { ok: true };
+  }
+  
+  if (method === 'GET' && path === '/cierre') {
+    const hoyStr = new Date().toISOString().slice(0, 10);
+    const delDia = store.ventas.filter(v => !v.anulada && (v.fecha || '').startsWith(hoyStr));
+    const porPago = { efectivo: 0, nequi: 0, daviplata: 0, tarjeta: 0 };
+    for (const v of delDia) porPago[v.pago] = (porPago[v.pago] || 0) + v.total;
+    const total = Object.values(porPago).reduce((a, b) => a + b, 0);
+    return {
+      fecha: hoyStr,
+      porPago,
+      total,
+      ventas: delDia.length
+    };
+  }
+  
+  if (method === 'PUT' && path.match(/^\/productos\/([a-z0-9-]+)$/)) {
+    const id = path.match(/^\/productos\/([a-z0-9-]+)$/)[1];
+    const p = store.productos.find(x => x.id === id);
+    if (p) {
+      if (body.nombre != null) p.nombre = String(body.nombre).trim();
+      if (body.precio != null && body.precio !== '') p.precio = Number(body.precio);
+      if (body.precio_combo !== undefined) p.precio_combo = body.precio_combo ? Number(body.precio_combo) : null;
+      if (body.activo != null) p.activo = body.activo ? 1 : 0;
+      if (body.categoria != null) p.categoria = body.categoria;
+      if (body.descripcion !== undefined) p.descripcion = body.descripcion;
+      if (body.modelo !== undefined) p.modelo = body.modelo;
+      saveDemoStore(store);
+    }
+    return { ok: true };
+  }
+
+  if (method === 'POST' && path === '/productos') {
+    const id = String(body.nombre).toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 30);
+    const nuevo = {
+      id,
+      nombre: String(body.nombre).trim(),
+      categoria: body.categoria || 'choripan',
+      precio: Number(body.precio || 0),
+      precio_combo: body.precio_combo ? Number(body.precio_combo) : null,
+      activo: body.activo ? 1 : 0,
+      orden: store.productos.length + 1,
+      modelo: body.modelo || '',
+      descripcion: body.descripcion || ''
+    };
+    store.productos.push(nuevo);
+    saveDemoStore(store);
+    return nuevo;
+  }
+  
+  if (method === 'PUT' && path.match(/^\/insumos\/(\d+)$/)) {
+    const id = Number(path.match(/^\/insumos\/(\d+)$/)[1]);
+    const ins = store.insumos.find(i => i.id === id);
+    if (ins) {
+      if (body.stock != null) ins.stock = Number(body.stock);
+      if (body.minimo != null) ins.minimo = Number(body.minimo);
+      if (body.costo != null) ins.costo = Number(body.costo);
+      if (body.activo != null) ins.activo = body.activo ? 1 : 0;
+      saveDemoStore(store);
+    }
+    return { ok: true };
+  }
+  
+  if (method === 'POST' && path === '/movimientos') {
+    const ins = store.insumos.find(i => i.id === Number(body.insumo_id));
+    if (ins) {
+      const q = Number(body.cantidad);
+      ins.stock = Math.max(0, Math.round((ins.stock + (body.tipo === 'compra' ? q : body.tipo === 'ajuste' ? q - ins.stock : -q)) * 100) / 100);
+      saveDemoStore(store);
+    }
+    return { ok: true };
+  }
+  
+  if (method === 'GET' && path.startsWith('/qr')) {
+    const params = new URLSearchParams(path.split('?')[1] || '');
+    const urlBase = params.get('url') || location.origin;
+    const numMesas = Math.min(20, Math.max(1, Number(params.get('mesas') || 5)));
+    const out = [];
+    for (let m = 1; m <= numMesas; m++) {
+      const fullUrl = `${urlBase.replace(/\/$/, '')}/?mesa=${m}`;
+      const qrSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100%" height="100%">
+        <rect width="100" height="100" fill="#fff" rx="8"/>
+        <rect x="10" y="10" width="26" height="26" fill="none" stroke="#000" stroke-width="5" rx="3"/>
+        <rect x="17" y="17" width="12" height="12" fill="#000"/>
+        <rect x="64" y="10" width="26" height="26" fill="none" stroke="#000" stroke-width="5" rx="3"/>
+        <rect x="71" y="17" width="12" height="12" fill="#000"/>
+        <rect x="10" y="64" width="26" height="26" fill="none" stroke="#000" stroke-width="5" rx="3"/>
+        <rect x="17" y="71" width="12" height="12" fill="#000"/>
+        <rect x="44" y="16" width="12" height="8" fill="#000"/>
+        <rect x="16" y="44" width="8" height="12" fill="#000"/>
+        <rect x="42" y="42" width="16" height="16" fill="#000" rx="2"/>
+        <rect x="66" y="46" width="10" height="8" fill="#000"/>
+        <rect x="46" y="66" width="8" height="14" fill="#000"/>
+        <rect x="64" y="64" width="22" height="22" fill="#000"/>
+        <text x="50" y="54" font-family="sans-serif" font-size="7" font-weight="bold" fill="#fff" text-anchor="middle">MESA ${m}</text>
+      </svg>`;
+      out.push({ mesa: m, url: fullUrl, svg: qrSvg });
+    }
+    return out;
+  }
+  
+  return { ok: true };
+}
+
 async function api(method, path, body) {
-  const r = await fetch('/api' + path, {
-    method, headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined,
-  });
-  const data = await r.json().catch(() => ({}));
-  if (r.status === 401 && path !== '/login' && path !== '/sesion') { mostrarLogin(); throw new Error(data.error || 'Sesión vencida'); }
-  if (!r.ok) throw new Error(data.error || 'Error');
-  return data;
+  if (modoDemo) return mockApi(method, path, body);
+  try {
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), 3500);
+    const r = await fetch('/api' + path, {
+      method, signal: ctrl.signal,
+      headers: body ? { 'Content-Type': 'application/json' } : {},
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    clearTimeout(to);
+    if (r.status === 404 || r.status === 502 || r.status === 503) {
+      return mockApi(method, path, body);
+    }
+    const data = await r.json().catch(() => ({}));
+    if (r.status === 401 && path !== '/login' && path !== '/sesion') {
+      mostrarLogin();
+      throw new Error(data.error || 'Sesión vencida');
+    }
+    if (!r.ok) throw new Error(data.error || 'Error');
+    return data;
+  } catch (err) {
+    if (err.name === 'AbortError' || err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError') || !navigator.onLine) {
+      return mockApi(method, path, body);
+    }
+    throw err;
+  }
 }
 
 const S = { u: null, productos: [], insumos: [], recetas: [], carrito: [], cat: 'choripan', pago: 'efectivo', recibido: '', rango: 'hoy' };
