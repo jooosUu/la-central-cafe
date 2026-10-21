@@ -339,3 +339,124 @@ dialog::backdrop { background: rgba(0, 0, 0, .55); }
   dialog#modal { position: static; box-shadow: none; max-height: none; width: 100%; border: 0; }
   dialog#modal .m-body { max-height: none; overflow: visible; }
 }
+
+/* ===================================================================
+   MESAS, COMANDAS Y COCINA (KDS)
+=================================================================== */
+/* Selector de mesa en carrito */
+.cart-mesa-bar {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--s2);
+  padding: 8px 12px; margin-bottom: var(--s3); background: var(--soft);
+  border-radius: 12px; border: 2px solid var(--ink);
+}
+.cart-mesa-bar label { font-weight: 800; font-size: 13px; text-transform: uppercase; }
+.cart-mesa-bar select {
+  font-weight: 800; font-size: 14px; background: transparent; border: 0;
+  cursor: pointer; outline: none; padding: 2px 4px;
+}
+
+/* Grilla de Mesas */
+.mesas-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: var(--s4); margin-top: var(--s4);
+}
+.mesa-card {
+  position: relative; border: var(--ring) solid var(--ink); border-radius: var(--r);
+  padding: var(--s4); background: var(--bg); display: flex; flex-direction: column;
+  justify-content: space-between; min-height: 180px; transition: transform .1s, box-shadow .15s;
+}
+.mesa-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,.08); }
+.mesa-card.ocupada {
+  background: #111; color: var(--bg);
+}
+.mesa-card.ocupada .mesa-num { color: var(--bg); }
+.mesa-card.ocupada .muted { color: #AFAFAF; }
+.mesa-card.ocupada .tag { background: #FF5722; color: #fff; border-color: #FF5722; }
+.mesa-top { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--s2); }
+.mesa-num { font: 800 28px/1 Utendo; }
+.mesa-info { margin: var(--s2) 0; }
+.mesa-tot { font: 800 24px/1 Utendo; margin-top: 4px; }
+.mesa-acc { display: flex; gap: 6px; flex-wrap: wrap; margin-top: var(--s3); }
+
+/* Cocina / KDS */
+.cocina-head-info {
+  display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap; margin-bottom: var(--s4);
+}
+.cocina-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--s4); margin-top: var(--s4);
+}
+.comanda-card {
+  border: var(--ring) solid var(--ink); border-radius: var(--r);
+  padding: var(--s4); background: var(--bg); display: flex; flex-direction: column;
+  gap: var(--s3); box-shadow: 0 4px 14px rgba(0,0,0,.05);
+}
+.comanda-card.estado-pendiente { border-left-width: 10px; border-left-color: #FF9800; }
+.comanda-card.estado-preparando { border-left-width: 10px; border-left-color: #2196F3; }
+.comanda-card.estado-listo { border-left-width: 10px; border-left-color: #4CAF50; opacity: .85; }
+.comanda-card-top {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--s2);
+  border-bottom: 2px dashed var(--line); padding-bottom: var(--s2);
+}
+.comanda-mesa { font: 800 22px/1 Utendo; }
+.comanda-time { font-size: 13px; color: var(--mute); font-weight: 800; }
+.comanda-items-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.comanda-items-list li {
+  display: flex; justify-content: space-between; align-items: baseline; font-size: 15px;
+}
+.comanda-items-list .it-cant {
+  font-weight: 800; background: var(--soft); padding: 2px 8px; border-radius: 99px; margin-right: 6px;
+}
+.comanda-items-list .it-nom { font-weight: 800; }
+.comanda-nota {
+  font-size: 13px; font-style: italic; background: #FFF9C4; color: #5D4037;
+  padding: 6px 10px; border-radius: 8px; margin-top: 4px;
+}
+.comanda-actions {
+  display: flex; gap: var(--s2); margin-top: auto; padding-top: var(--s3);
+  border-top: 2px solid var(--soft);
+}
+.comanda-actions .btn { flex: 1; }
+
+/* Propina y Descuentos */
+.propina-grid, .desc-grid {
+  display: flex; gap: var(--s2); flex-wrap: wrap; margin: var(--s2) 0 var(--s3);
+}
+.propina-grid button, .desc-grid button {
+  flex: 1; min-height: 40px; padding: 0 12px; border-radius: 99px;
+  border: var(--ring) solid var(--ink); font-weight: 800; font-size: 13px;
+}
+.propina-grid button.activo, .desc-grid button.activo {
+  background: var(--ink); color: var(--bg);
+}
+
+/* Alertas de inventario */
+.tag-critico { background: #B3261E !important; color: #fff !important; border-color: #B3261E !important; animation: pulse 1.5s infinite; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .7; } }
+.inv-filtros { display: flex; gap: var(--s2); margin-bottom: var(--s4); flex-wrap: wrap; }
+
+/* ---------- TICKET TERMICO IMPRESION ---------- */
+.ticket-print-area { display: none; }
+@media print {
+  body * { visibility: hidden !important; }
+  .ticket-print-area, .ticket-print-area * { visibility: visible !important; }
+  .ticket-print-area {
+    display: block !important;
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 68mm;
+    margin: 0;
+    padding: 3mm;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 12px;
+    line-height: 1.25;
+    color: #000;
+    background: #fff;
+  }
+  .t-center { text-align: center; }
+  .t-bold { font-weight: bold; }
+  .t-sep { border-bottom: 1px dashed #000; margin: 4px 0; }
+  .t-linea { display: flex; justify-content: space-between; }
+}
+

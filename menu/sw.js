@@ -1,6 +1,6 @@
 // Service worker del menú: abre rápido y sin señal. Precios siempre frescos cuando hay red.
-const VERSION = 'lacentral-menu-v14';
-const BASE = ['./', 'index.html', 'styles.css?v=14', 'app.js?v=14', 'menu.js?v=14', 'vendor/model-viewer.min.js',
+const VERSION = 'lacentral-menu-v15';
+const BASE = ['./', 'index.html', 'styles.css?v=15', 'app.js?v=15', 'menu.js?v=13', 'vendor/model-viewer.min.js',
   'fonts/Utendo-Medium.ttf', 'fonts/Utendo-ExtraBold.ttf', 'fonts/Geist-VariableFont_wght.ttf',
   'img/logo-horizontal.svg', 'img/taza.svg', 'img/icono-corazon.svg', 'img/icono-fuego.svg', 'img/icono-rapido.svg', 'img/icono-cafe.svg'];
 

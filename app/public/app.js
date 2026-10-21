@@ -195,13 +195,65 @@ async function mockApi(method, path, body) {
       fecha,
       total,
       pago: body.pago,
-      recibido: recibido || null,
       anulada: 0,
-      items: lineas
+      items: lineas,
+      mesa: body.mesa || 'Caja',
+      propina: body.propina || 0
     };
+    if (body.comanda_id) {
+      const c = (store.comandas || []).find(x => x.id === Number(body.comanda_id));
+      if (c) c.estado = 'cobrado';
+    }
     store.ventas.unshift(venta);
     saveDemoStore(store);
-    return { id: venta.id, total, cambio };
+    return { id: venta.id, total, cambio, items: lineas, fecha, pago: body.pago, mesa: body.mesa, propina: body.propina || 0, alertas: [] };
+  }
+  
+  if (method === 'GET' && path === '/comandas') {
+    return (store.comandas || []).filter(c => c.estado !== 'archivado');
+  }
+
+  if (method === 'POST' && path === '/comandas') {
+    const d = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    const fecha = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    const items = body.items || [];
+    const total = items.reduce((a, it) => a + (Number(it.precio) || 0) * (Number(it.cantidad) || 1), 0);
+    const c = {
+      id: Date.now(),
+      mesa: body.mesa || 'Mesa 1',
+      cliente: body.cliente || '',
+      fecha,
+      estado: 'pendiente',
+      total,
+      items,
+      notas: body.notas || ''
+    };
+    store.comandas = store.comandas || [];
+    store.comandas.unshift(c);
+    saveDemoStore(store);
+    return c;
+  }
+
+  if (method === 'PUT' && path.match(/^\/comandas\/(\d+)$/)) {
+    const id = Number(path.match(/^\/comandas\/(\d+)$/)[1]);
+    const c = (store.comandas || []).find(x => x.id === id);
+    if (!c) throw new Error('Comanda no encontrada');
+    if (body.estado) c.estado = body.estado;
+    if (body.items) {
+      c.items = body.items;
+      c.total = c.items.reduce((a, it) => a + (Number(it.precio) || 0) * (Number(it.cantidad) || 1), 0);
+    }
+    saveDemoStore(store);
+    return c;
+  }
+
+  if (method === 'DELETE' && path.match(/^\/comandas\/(\d+)$/)) {
+    const id = Number(path.match(/^\/comandas\/(\d+)$/)[1]);
+    const c = (store.comandas || []).find(x => x.id === id);
+    if (c) c.estado = 'archivado';
+    saveDemoStore(store);
+    return { ok: true };
   }
   
   if (method === 'GET' && path.startsWith('/ventas')) {
@@ -348,7 +400,116 @@ async function api(method, path, body) {
   }
 }
 
-const S = { u: null, productos: [], insumos: [], recetas: [], carrito: [], cat: 'choripan', pago: 'efectivo', recibido: '', rango: 'hoy' };
+const MESAS_LISTA = ['Mesa 1', 'Mesa 2', 'Mesa 3', 'Mesa 4', 'Mesa 5', 'Mesa 6', 'Mesa 7', 'Mesa 8', 'Barra 1', 'Barra 2', 'Para Llevar'];
+
+const S = {
+  u: null, productos: [], insumos: [], recetas: [], categorias: [], modelos: [],
+  carrito: [], cat: 'choripan', pago: 'efectivo', recibido: '', rango: 'hoy',
+  mesa: 'Mesa 1', propina: 0, propinaPct: 0, descuento: 0, descuentoPct: 0,
+  comanda_id: null, comandas: [], ultimoTicket: null, filtroInv: 'todos'
+};
+
+// ---------- sonido timbre cocina (Web Audio API) ----------
+function sonarTimbre() {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(880, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.6);
+    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.6);
+  } catch {}
+}
+
+// ---------- impresión y ticket térmico ----------
+function generarTicketHtml(venta) {
+  const d = new Date(venta.fecha || Date.now());
+  const fechaStr = d.toLocaleDateString('es-CO') + ' ' + d.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
+  const items = venta.items || [];
+  return `
+    <div class="ticket-termico">
+      <div class="t-center t-bold" style="font-size:15px; margin-bottom:2px;">LA CENTRAL CAFÉ</div>
+      <div class="t-center" style="font-size:10px;">NIT: 901.458.912-3</div>
+      <div class="t-center" style="font-size:10px;">Cra 4 # 12-34 · La Central</div>
+      <div class="t-sep"></div>
+      <div class="t-linea"><span>Ticket: #${venta.id}</span><span><b>${esc(venta.mesa || 'Caja')}</b></span></div>
+      <div class="t-linea"><span>Fecha:</span><span>${fechaStr}</span></div>
+      <div class="t-linea"><span>Atendió:</span><span>${esc(S.u?.nombre || 'Cajero')}</span></div>
+      <div class="t-sep"></div>
+      ${items.map(it => `
+        <div class="t-linea">
+          <span>${it.cantidad}x ${esc(it.nombre || it.producto_id)}</span>
+          <span>${cop((it.precio || 0) * (it.cantidad || 1))}</span>
+        </div>
+      `).join('')}
+      <div class="t-sep"></div>
+      ${venta.propina ? `<div class="t-linea"><span>Propina voluntaria:</span><span>${cop(venta.propina)}</span></div>` : ''}
+      <div class="t-linea t-bold" style="font-size:14px; margin: 4px 0;">
+        <span>TOTAL:</span><span>${cop(venta.total)}</span>
+      </div>
+      <div class="t-linea"><span>Medio de pago:</span><span>${String(venta.pago || '').toUpperCase()}</span></div>
+      ${venta.cambio != null ? `<div class="t-linea"><span>Cambio:</span><span>${cop(venta.cambio)}</span></div>` : ''}
+      <div class="t-sep"></div>
+      <div class="t-center" style="margin-top:6px; font-size:11px;">¡Gracias por tu visita!</div>
+      <div class="t-center" style="font-size:10px; color:#555;">lacentralcafe.onrender.com</div>
+    </div>
+  `;
+}
+
+function imprimirTicket(venta) {
+  const printArea = $('#ticket-print');
+  if (!printArea) return;
+  printArea.innerHTML = generarTicketHtml(venta);
+  window.print();
+}
+
+function compartirTicketWhatsApp(venta) {
+  const d = new Date(venta.fecha || Date.now());
+  const fechaStr = d.toLocaleDateString('es-CO') + ' ' + d.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
+  const items = venta.items || [];
+  let txt = `*🧾 TICKET DE COMPRA - LA CENTRAL CAFÉ*\n`;
+  txt += `*Ticket:* #${venta.id} | *${venta.mesa || 'Caja'}*\n`;
+  txt += `*Fecha:* ${fechaStr}\n`;
+  txt += `--------------------------------\n`;
+  for (const it of items) {
+    txt += `• ${it.cantidad}x ${it.nombre || it.producto_id} - ${cop((it.precio || 0) * (it.cantidad || 1))}\n`;
+  }
+  txt += `--------------------------------\n`;
+  if (venta.propina) txt += `*Propina voluntaria:* ${cop(venta.propina)}\n`;
+  txt += `*TOTAL:* ${cop(venta.total)} (${String(venta.pago || '').toUpperCase()})\n`;
+  if (venta.cambio != null) txt += `*Cambio entregado:* ${cop(venta.cambio)}\n`;
+  txt += `\n¡Gracias por tu compra en La Central Café! ☕`;
+  window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(txt)}`, '_blank');
+}
+
+// ---------- exportador a CSV ----------
+function descargarCSV(nombreArchivo, encabezados, filas) {
+  const escapeCSV = val => {
+    const s = String(val ?? '').replace(/"/g, '""');
+    return /[",\n\r]/.test(s) ? `"${s}"` : s;
+  };
+  const contenido = [
+    encabezados.map(escapeCSV).join(','),
+    ...filas.map(f => f.map(escapeCSV).join(','))
+  ].join('\r\n');
+  const blob = new Blob(["\uFEFF" + contenido], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${nombreArchivo}-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
 
 // ---------- SVG de marca ----------
 const svgCache = {};
@@ -422,9 +583,52 @@ $('#salir').onclick = async () => { await api('POST', '/logout').catch(() => {})
 async function cargar() {
   const d = await api('GET', '/datos');
   Object.assign(S, d);
-  const bajos = S.insumos.filter(i => i.activo && i.stock <= i.minimo).length;
-  $('#badge-inv').hidden = !bajos; $('#badge-inv').textContent = bajos;
+  try {
+    S.comandas = await api('GET', '/comandas');
+  } catch {
+    S.comandas = [];
+  }
+  actualizarBadges();
 }
+
+function actualizarBadges() {
+  const bajos = (S.insumos || []).filter(i => i.activo && i.stock <= i.minimo).length;
+  $('#badge-inv').hidden = !bajos; $('#badge-inv').textContent = bajos;
+  const pendientes = (S.comandas || []).filter(c => c.estado === 'pendiente' || c.estado === 'preparando').length;
+  $('#badge-cocina').hidden = !pendientes; $('#badge-cocina').textContent = pendientes;
+  const ocupadas = (S.comandas || []).filter(c => c.estado !== 'cobrado' && c.estado !== 'archivado').length;
+  $('#badge-mesas').hidden = !ocupadas; $('#badge-mesas').textContent = ocupadas;
+}
+
+let nPendientesPrev = 0;
+setInterval(async () => {
+  if (!S.u) return;
+  try {
+    const cs = await api('GET', '/comandas');
+    const nPend = cs.filter(c => c.estado === 'pendiente').length;
+    if (nPend > nPendientesPrev && nPendientesPrev !== 0) {
+      sonarTimbre();
+      toast('🔔 ¡Nueva comanda recibida en cocina!', 'warn');
+    }
+    nPendientesPrev = nPend;
+    S.comandas = cs;
+    actualizarBadges();
+    if (location.hash === '#cocina') renderCocina();
+    if (location.hash === '#mesas') renderMesas();
+  } catch {}
+}, 4000);
+
+window.addEventListener('storage', e => {
+  if (e.key === 'lc_comanda_ping' || e.key === 'lc_demo_store') {
+    cargar().then(() => {
+      sonarTimbre();
+      toast('🔔 ¡Nueva orden recibida desde el menú!', 'warn');
+      if (location.hash === '#cocina') renderCocina();
+      if (location.hash === '#mesas') renderMesas();
+    }).catch(() => {});
+  }
+});
+
 const insumo = id => S.insumos.find(i => i.id === id);
 function disponibles(pid, variante = 'base') {
   const rec = S.recetas.filter(r => r.producto_id === pid && (r.variante === 'base' || r.variante === variante));
@@ -440,7 +644,7 @@ async function iniciar() {
 }
 
 // ---------- router ----------
-const VISTAS = { vender, inventario, reportes, ajustes };
+const VISTAS = { vender, mesas, cocina, inventario, reportes, ajustes };
 function router() {
   if (!S.u) return;
   const v = location.hash.slice(1) in VISTAS ? location.hash.slice(1) : 'vender';
@@ -449,6 +653,174 @@ function router() {
   $('#vista').focus({ preventScroll: true });
 }
 addEventListener('hashchange', router);
+
+// =================================================================== MESAS
+function mesas() {
+  api('GET', '/comandas').then(cs => { S.comandas = cs; actualizarBadges(); renderMesas(); }).catch(() => renderMesas());
+}
+
+function tiempoRelativo(fechaStr) {
+  if (!fechaStr) return '';
+  const diffMin = Math.max(0, Math.round((Date.now() - new Date(fechaStr).getTime()) / 60000));
+  if (diffMin <= 1) return 'hace un momento';
+  if (diffMin < 60) return `hace ${diffMin} min`;
+  const h = Math.floor(diffMin / 60), m = diffMin % 60;
+  return `hace ${h}h ${m}m`;
+}
+
+function renderMesas() {
+  const activas = (S.comandas || []).filter(c => c.estado !== 'cobrado' && c.estado !== 'archivado');
+  $('#vista').innerHTML = `
+  <section class="pagina">
+    <header class="p-head">
+      <div>
+        <h1>mesas</h1>
+        <p class="muted">${activas.length} mesa(s) ocupada(s) · ${MESAS_LISTA.length - activas.length} libre(s)</p>
+      </div>
+      <div class="p-acc">
+        <button class="btn btn-sm" id="btn-nueva-m">+ nueva comanda</button>
+      </div>
+    </header>
+    <hr class="regla">
+    <div class="mesas-grid">
+      ${MESAS_LISTA.map(m => {
+        const c = activas.find(x => x.mesa === m);
+        if (c) {
+          const nItems = (c.items || []).reduce((a, it) => a + (Number(it.cantidad) || 1), 0);
+          return `
+            <div class="mesa-card ocupada">
+              <div class="mesa-top">
+                <div class="mesa-num">${esc(m)}</div>
+                <b class="tag">${c.estado}</b>
+              </div>
+              <div class="mesa-info">
+                <span class="muted">${tiempoRelativo(c.fecha)} · ${nItems} ítem(s)</span>
+                <div class="mesa-tot">${cop(c.total)}</div>
+                ${c.notas ? `<p class="muted" style="font-size:12px; margin-top:2px;">"${esc(c.notas)}"</p>` : ''}
+              </div>
+              <div class="mesa-acc">
+                <button class="btn btn-sm" data-abrir="${c.id}" style="background:#fff; color:#000;">+ agregar</button>
+                <button class="btn btn-sm link" data-precuenta="${c.id}" style="color:#fff;">pre-cuenta</button>
+                <button class="btn btn-sm" data-cobrar-m="${c.id}" style="background:#22c55e; border-color:#22c55e; color:#fff;">cobrar</button>
+              </div>
+            </div>`;
+        } else {
+          return `
+            <div class="mesa-card libre">
+              <div class="mesa-top">
+                <div class="mesa-num">${esc(m)}</div>
+                <span class="muted" style="font-size:13px; font-weight:800;">LIBRE</span>
+              </div>
+              <div class="mesa-info"><p class="muted" style="font-size:14px;">Disponible para clientes</p></div>
+              <div class="mesa-acc"><button class="btn btn-sm btn-negro" data-nueva="${esc(m)}">abrir mesa</button></div>
+            </div>`;
+        }
+      }).join('')}
+    </div>
+  </section>`;
+
+  $('#btn-nueva-m')?.addEventListener('click', () => { S.mesa = MESAS_LISTA[0]; S.comanda_id = null; location.hash = '#vender'; });
+  $$('[data-nueva]').forEach(b => b.onclick = () => { S.mesa = b.dataset.nueva; S.comanda_id = null; S.carrito = []; location.hash = '#vender'; });
+  $$('[data-abrir]').forEach(b => b.onclick = () => {
+    const c = (S.comandas || []).find(x => x.id === Number(b.dataset.abrir));
+    if (!c) return;
+    S.mesa = c.mesa; S.comanda_id = c.id;
+    S.carrito = (c.items || []).map(it => ({ id: it.producto_id || it.id, variante: it.variante || 'base', cantidad: Number(it.cantidad) || 1 }));
+    location.hash = '#vender';
+    toast(`Editando comanda de ${c.mesa}`);
+  });
+  $$('[data-precuenta]').forEach(b => b.onclick = () => {
+    const c = (S.comandas || []).find(x => x.id === Number(b.dataset.precuenta));
+    if (!c) return;
+    const ticketData = { id: c.id, mesa: c.mesa, fecha: c.fecha, total: c.total, pago: 'pendiente', items: c.items };
+    abrirModal(`pre-cuenta · ${c.mesa}`, `
+      <div style="text-align:center;">
+        <p class="muted">Resumen para entregar en la mesa:</p>
+        <div style="background:var(--soft); padding:16px; border-radius:14px; text-align:left; margin:14px 0; font-family:monospace; font-size:13px;">
+          <b>${c.mesa}</b> · ${c.fecha}<br>
+          -----------------------------<br>
+          ${(c.items || []).map(it => `${it.cantidad}x ${esc(it.nombre)} - ${cop((it.precio||0)*(it.cantidad||1))}`).join('<br>')}<br>
+          -----------------------------<br>
+          <b>TOTAL: ${cop(c.total)}</b>
+        </div>
+      </div>`, () => imprimirTicket(ticketData), { ok: '🖨️ imprimir pre-cuenta' });
+  });
+  $$('[data-cobrar-m]').forEach(b => b.onclick = () => {
+    const c = (S.comandas || []).find(x => x.id === Number(b.dataset.cobrarM));
+    if (!c) return;
+    S.mesa = c.mesa; S.comanda_id = c.id;
+    S.carrito = (c.items || []).map(it => ({ id: it.producto_id || it.id, variante: it.variante || 'base', cantidad: Number(it.cantidad) || 1 }));
+    location.hash = '#vender';
+    setTimeout(() => cobrar(), 150);
+  });
+}
+
+// =================================================================== COCINA (KDS)
+let filtroCocina = 'todas';
+function cocina() {
+  api('GET', '/comandas').then(cs => { S.comandas = cs; actualizarBadges(); renderCocina(); }).catch(() => renderCocina());
+}
+
+function renderCocina() {
+  const activas = (S.comandas || []).filter(c => c.estado !== 'cobrado' && c.estado !== 'archivado');
+  const filtradas = filtroCocina === 'todas' ? activas : activas.filter(c => c.estado === filtroCocina);
+  const nPend = activas.filter(c => c.estado === 'pendiente').length;
+  const nPrep = activas.filter(c => c.estado === 'preparando').length;
+  const nList = activas.filter(c => c.estado === 'listo').length;
+
+  $('#vista').innerHTML = `
+  <section class="pagina">
+    <header class="p-head">
+      <div><h1>cocina</h1><p class="muted">Monitor de pedidos en tiempo real (KDS)</p></div>
+      <div class="p-acc"><button class="btn btn-sm" id="btn-timbre">🔔 probar timbre</button></div>
+    </header>
+    <hr class="regla">
+    <div class="cocina-head-info">
+      <div class="chips">
+        <button data-fc="todas" ${filtroCocina === 'todas' ? 'aria-selected="true"' : ''}>todas (${activas.length})</button>
+        <button data-fc="pendiente" ${filtroCocina === 'pendiente' ? 'aria-selected="true"' : ''}>pendientes (${nPend})</button>
+        <button data-fc="preparando" ${filtroCocina === 'preparando' ? 'aria-selected="true"' : ''}>en preparación (${nPrep})</button>
+        <button data-fc="listo" ${filtroCocina === 'listo' ? 'aria-selected="true"' : ''}>listas (${nList})</button>
+      </div>
+    </div>
+    <div class="cocina-grid">
+      ${filtradas.length ? filtradas.map(c => `
+        <div class="comanda-card estado-${c.estado}">
+          <div class="comanda-card-top">
+            <span class="comanda-mesa">${esc(c.mesa)}</span>
+            <span class="comanda-time">${tiempoRelativo(c.fecha)}</span>
+          </div>
+          ${c.notas ? `<div class="comanda-nota">📝 "${esc(c.notas)}"</div>` : ''}
+          <ul class="comanda-items-list">
+            ${(c.items || []).map(it => `
+              <li><span><b class="it-cant">${it.cantidad}x</b> <span class="it-nom">${esc(it.nombre || it.id)}</span></span></li>
+            `).join('')}
+          </ul>
+          <div class="comanda-actions">
+            ${c.estado === 'pendiente' ? `
+              <button class="btn btn-negro" data-avanzar="${c.id}" data-sig="preparando">🍳 preparar</button>
+            ` : c.estado === 'preparando' ? `
+              <button class="btn btn-negro" data-avanzar="${c.id}" data-sig="listo" style="background:#22c55e; border-color:#22c55e;">✅ listo</button>
+            ` : `
+              <button class="btn" data-avanzar="${c.id}" data-sig="entregado">📦 entregar</button>
+            `}
+          </div>
+        </div>`).join('') : '<p class="vacio">No hay comandas activas en esta sección.</p>'}
+    </div>
+  </section>`;
+
+  $('#btn-timbre')?.addEventListener('click', () => { sonarTimbre(); toast('Campana de cocina probada ✓'); });
+  $$('[data-fc]').forEach(b => b.onclick = () => { filtroCocina = b.dataset.fc; renderCocina(); });
+  $$('[data-avanzar]').forEach(b => b.onclick = async () => {
+    const id = Number(b.dataset.avanzar); const estado = b.dataset.sig;
+    b.disabled = true;
+    try {
+      await api('PUT', `/comandas/${id}`, { estado });
+      sonarTimbre(); toast(`Comanda de ${b.closest('.comanda-card').querySelector('.comanda-mesa').textContent} actualizada a "${estado}"`);
+      await cargar(); renderCocina();
+    } catch (err) { toast(err.message, 'warn'); b.disabled = false; }
+  });
+}
 
 // =================================================================== VENDER
 function vender() {
@@ -487,74 +859,163 @@ function agregar(pid, variante) {
   if (l) l.cantidad++; else S.carrito.push({ id: pid, variante, cantidad: 1 });
   pintarCarrito(true);
 }
-const precioDe = l => { const p = S.productos.find(x => x.id === l.id); return l.variante === 'combo' ? p.precio_combo : p.precio; };
+const precioDe = l => { const p = S.productos.find(x => x.id === l.id); return l.variante === 'combo' ? (p.precio_combo || p.precio) : p.precio; };
 const totalCarrito = () => S.carrito.reduce((a, l) => a + precioDe(l) * l.cantidad, 0);
 
 function pintarCarrito(pulso = false) {
   const c = $('#carrito'); if (!c) return;
   const total = totalCarrito(), items = S.carrito.reduce((a, l) => a + l.cantidad, 0);
-  const rec = Number(S.recibido) || 0;
   c.innerHTML = `
     <button class="c-resumen" id="c-toggle" aria-expanded="${c.classList.contains('abierto')}">
-      <span>pedido · ${items} ${items === 1 ? 'producto' : 'productos'}</span><b>${cop(total)}</b></button>
+      <span>pedido (${esc(S.mesa)}) · ${items} ${items === 1 ? 'ítem' : 'ítems'}</span><b>${cop(total)}</b></button>
     <div class="c-cuerpo">
-      <h2>pedido</h2><hr class="regla">
+      <div class="cart-mesa-bar">
+        <label for="cart-mesa-sel">Mesa / Destino:</label>
+        <select id="cart-mesa-sel">${MESAS_LISTA.map(m => `<option value="${esc(m)}" ${m === S.mesa ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select>
+      </div>
+      <h2>pedido ${S.comanda_id ? `<small style="font-size:13px; font-weight:800; color:#22c55e;">(mesa activa)</small>` : ''}</h2>
+      <hr class="regla">
       ${S.carrito.length ? `<ul class="c-lineas">${S.carrito.map((l, i) => {
         const p = S.productos.find(x => x.id === l.id);
-        return `<li><div class="c-nom">${esc(p.nombre)}${l.variante === 'combo' ? ' <small>combo</small>' : ''}<span class="muted">${cop(precioDe(l))}</span></div>
+        return `<li><div class="c-nom">${esc(p?.nombre || l.id)}${l.variante === 'combo' ? ' <small>combo</small>' : ''}<span class="muted">${cop(precioDe(l))}</span></div>
           <div class="qty"><button data-q="${i}" data-d="-1" aria-label="Quitar uno">−</button><b>${l.cantidad}</b><button data-q="${i}" data-d="1" aria-label="Agregar uno">+</button></div>
           <b class="c-sub">${cop(precioDe(l) * l.cantidad)}</b></li>`;
       }).join('')}</ul>` : '<p class="vacio">Toca un producto para agregarlo.</p>'}
-      <div class="c-total"><span>total</span><b>${cop(total)}</b></div>
-      <div class="pagos" role="radiogroup" aria-label="Medio de pago">${Object.entries(PAGOS).map(([k, v]) =>
-        `<button role="radio" aria-checked="${S.pago === k}" data-pago="${k}">${v}</button>`).join('')}</div>
-      ${S.pago === 'efectivo' ? `
-        <label class="campo"><span>recibido</span><input id="recibido" inputmode="numeric" placeholder="0" value="${S.recibido}"></label>
-        <div class="rapidos">${[total, 20000, 50000, 100000].filter((v, i, a) => v > 0 && a.indexOf(v) === i).map(v => `<button data-rec="${v}">${v === total ? 'exacto' : cop(v)}</button>`).join('')}</div>
-        <div class="cambio ${rec && rec < total ? 'neg' : ''}"><span>cambio</span><b>${rec ? (rec >= total ? cop(rec - total) : 'falta ' + cop(total - rec)) : '—'}</b></div>` : ''}
-      <div class="c-acciones">
-        <button class="btn" id="vaciar" ${S.carrito.length ? '' : 'disabled'}>vaciar</button>
+      <div class="c-total"><span>subtotal</span><b>${cop(total)}</b></div>
+      <div class="c-acciones" style="display:flex; flex-direction:column; gap:8px;">
+        <div style="display:flex; gap:8px;">
+          <button class="btn" id="vaciar" ${S.carrito.length ? '' : 'disabled'} style="flex:1;">vaciar</button>
+          <button class="btn" id="guardar-mesa" ${S.carrito.length ? '' : 'disabled'} style="flex:1.5; background:var(--soft);">guardar mesa</button>
+        </div>
         <button class="btn btn-negro btn-xl" id="cobrar" ${S.carrito.length ? '' : 'disabled'}>cobrar ${cop(total)}</button>
       </div>
     </div>`;
   if (pulso) { c.classList.remove('pulso'); void c.offsetWidth; c.classList.add('pulso'); }
   $('#c-toggle').onclick = () => { c.classList.toggle('abierto'); $('#c-toggle').setAttribute('aria-expanded', c.classList.contains('abierto')); };
+  $('#cart-mesa-sel').onchange = e => { S.mesa = e.target.value; pintarCarrito(); };
   $$('[data-q]', c).forEach(b => b.onclick = () => {
     const l = S.carrito[b.dataset.q]; l.cantidad += Number(b.dataset.d);
     if (l.cantidad <= 0) S.carrito.splice(b.dataset.q, 1);
     pintarCarrito();
   });
-  $$('[data-pago]', c).forEach(b => b.onclick = () => { S.pago = b.dataset.pago; pintarCarrito(); });
-  $$('[data-rec]', c).forEach(b => b.onclick = () => { S.recibido = b.dataset.rec; pintarCarrito(); });
-  const ri = $('#recibido', c);
-  if (ri) ri.oninput = () => {
-    S.recibido = ri.value.replace(/\D/g, '');
-    const r = Number(S.recibido) || 0, cb = $('.cambio', c);
-    cb.classList.toggle('neg', r && r < total);
-    $('b', cb).textContent = r ? (r >= total ? cop(r - total) : 'falta ' + cop(total - r)) : '—';
+  $('#vaciar', c).onclick = () => { S.carrito = []; S.comanda_id = null; pintarCarrito(); };
+  $('#guardar-mesa', c).onclick = async () => {
+    if (!S.carrito.length) return;
+    const items = S.carrito.map(l => {
+      const p = S.productos.find(x => x.id === l.id);
+      return { id: l.id, producto_id: l.id, nombre: p ? p.nombre + (l.variante === 'combo' ? ' (combo)' : '') : l.id, variante: l.variante, cantidad: l.cantidad, precio: precioDe(l) };
+    });
+    try {
+      if (S.comanda_id) {
+        await api('PUT', `/comandas/${S.comanda_id}`, { items, mesa: S.mesa });
+      } else {
+        await api('POST', '/comandas', { mesa: S.mesa, items });
+      }
+      sonarTimbre(); toast(`Comanda guardada en ${S.mesa} y enviada a cocina ✓`);
+      S.carrito = []; S.comanda_id = null; await cargar(); vender();
+    } catch (err) { toast(err.message, 'warn'); }
   };
-  $('#vaciar', c).onclick = () => { S.carrito = []; S.recibido = ''; pintarCarrito(); };
   $('#cobrar', c).onclick = cobrar;
 }
 
 async function cobrar() {
-  const total = totalCarrito();
-  if (S.pago === 'efectivo' && S.recibido && Number(S.recibido) < total) return toast('El efectivo recibido no alcanza', 'warn');
-  const btn = $('#cobrar'); btn.disabled = true;
-  try {
+  const baseTotal = totalCarrito();
+  if (!baseTotal) return;
+  const propina10 = Math.round((baseTotal * 0.10) / 100) * 100;
+  let propina = S.propina || 0;
+  let total = baseTotal + propina;
+  let pagoSelec = S.pago || 'efectivo';
+
+  abrirModal(`cobrar · ${esc(S.mesa)}`, `
+    <div class="cobro-modal">
+      <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:8px;">
+        <span class="muted">Subtotal:</span>
+        <b style="font-size:22px;">${cop(baseTotal)}</b>
+      </div>
+      <label class="campo">
+        <span>Propina voluntaria sugerida (10%)</span>
+        <div class="propina-grid">
+          <button type="button" data-prop="0" class="${propina === 0 ? 'activo' : ''}">Sin propina</button>
+          <button type="button" data-prop="${propina10}" class="${propina === propina10 ? 'activo' : ''}">+10% (${cop(propina10)})</button>
+        </div>
+      </label>
+      <div style="display:flex; justify-content:space-between; align-items:baseline; padding:10px 0; border-top:2px solid var(--soft); margin:8px 0;">
+        <span style="font-weight:800; font-size:18px;">TOTAL A COBRAR:</span>
+        <b id="modal-tot-val" style="font-size:28px; color:#000;">${cop(total)}</b>
+      </div>
+      <div class="campo">
+        <span>Medio de pago:</span>
+        <div class="pagos" role="radiogroup">${Object.entries(PAGOS).map(([k, v]) =>
+          `<button type="button" role="radio" aria-checked="${pagoSelec === k}" data-mp="${k}">${v}</button>`).join('')}</div>
+      </div>
+      <div id="cobro-efectivo-bloque" ${pagoSelec === 'efectivo' ? '' : 'hidden'}>
+        <label class="campo">
+          <span>Efectivo recibido</span>
+          <input id="modal-recibido" inputmode="numeric" placeholder="${total}">
+        </label>
+        <div class="cambio" id="modal-cambio" style="margin-top:6px;"><span>Cambio:</span><b>—</b></div>
+      </div>
+    </div>
+  `, async () => {
+    const finalTotal = baseTotal + propina;
+    const finalRecibido = pagoSelec === 'efectivo' ? (Number($('#modal-recibido')?.value.replace(/\D/g, '')) || finalTotal) : null;
+    if (pagoSelec === 'efectivo' && finalRecibido < finalTotal) {
+      throw new Error('El efectivo recibido es menor al total');
+    }
+    const itemsVenta = S.carrito.map(l => {
+      const p = S.productos.find(x => x.id === l.id);
+      return { producto_id: l.id, nombre: p ? p.nombre + (l.variante === 'combo' ? ' (combo)' : '') : l.id, variante: l.variante, cantidad: l.cantidad, precio: precioDe(l) };
+    });
     const r = await api('POST', '/ventas', {
       items: S.carrito.map(l => ({ producto_id: l.id, variante: l.variante, cantidad: l.cantidad })),
-      pago: S.pago, recibido: S.pago === 'efectivo' ? S.recibido : null,
+      pago: pagoSelec, recibido: finalRecibido, mesa: S.mesa, propina, comanda_id: S.comanda_id
     });
-    S.carrito = []; S.recibido = '';
+    r.items = itemsVenta; r.mesa = S.mesa; r.propina = propina; r.total = finalTotal;
+    S.ultimoTicket = r; S.carrito = []; S.recibido = ''; S.comanda_id = null; S.propina = 0;
     await cargar(); vender();
-    abrirModal(`venta #${r.id}`, `
-      <div class="ok-venta"><span class="ring-big">✓</span><p class="big">${cop(r.total)}</p>
-      <p>${PAGOS[S.pago]}${r.cambio != null ? ` · cambio <b>${cop(r.cambio)}</b>` : ''}</p></div>
-      ${r.alertas.length ? `<div class="alerta"><b>Inventario bajo</b><ul>${r.alertas.slice(0, 6).map(a =>
-        `<li>${esc(a.nombre)}: ${numf(a.stock)} ${esc(a.unidad)} (mín. ${numf(a.minimo)})</li>`).join('')}</ul></div>` : ''}`,
-      () => true, { ok: 'nueva venta' });
-  } catch (err) { toast(err.message, 'warn'); btn.disabled = false; }
+    setTimeout(() => {
+      abrirModal(`venta #${r.id} exitosa ✓`, `
+        <div class="ok-venta" style="text-align:center;">
+          <span class="ring-big">✓</span>
+          <p class="big" style="font-size:32px; font-weight:800; margin:8px 0;">${cop(r.total)}</p>
+          <p class="muted">${r.mesa || 'Caja'} · ${PAGOS[pagoSelec]}${r.cambio != null ? ` · cambio <b>${cop(r.cambio)}</b>` : ''}</p>
+          <div style="display:flex; gap:10px; justify-content:center; margin-top:20px;">
+            <button type="button" class="btn btn-negro" id="btn-print-tkt">🖨️ imprimir ticket</button>
+            <button type="button" class="btn" id="btn-wa-tkt">📱 whatsapp</button>
+          </div>
+        </div>`, () => true, { ok: 'nueva venta' });
+      $('#btn-print-tkt')?.addEventListener('click', () => imprimirTicket(r));
+      $('#btn-wa-tkt')?.addEventListener('click', () => compartirTicketWhatsApp(r));
+    }, 200);
+  }, { ok: 'completar pago' });
+
+  $$('[data-prop]').forEach(b => b.onclick = () => {
+    propina = Number(b.dataset.prop);
+    $$('[data-prop]').forEach(x => x.classList.toggle('activo', x === b));
+    total = baseTotal + propina;
+    $('#modal-tot-val').textContent = cop(total);
+    actCambio();
+  });
+  $$('[data-mp]').forEach(b => b.onclick = () => {
+    pagoSelec = b.dataset.mp; S.pago = pagoSelec;
+    $$('[data-mp]').forEach(x => x.setAttribute('aria-checked', x === b));
+    $('#cobro-efectivo-bloque').hidden = pagoSelec !== 'efectivo';
+  });
+  const actCambio = () => {
+    const val = Number($('#modal-recibido')?.value.replace(/\D/g, '')) || 0;
+    const diff = val - (baseTotal + propina);
+    const cb = $('#modal-cambio');
+    if (!cb) return;
+    if (val) {
+      $('b', cb).textContent = diff >= 0 ? cop(diff) : 'falta ' + cop(-diff);
+      cb.classList.toggle('neg', diff < 0);
+    } else {
+      $('b', cb).textContent = '—';
+      cb.classList.remove('neg');
+    }
+  };
+  const recInput = $('#modal-recibido');
+  if (recInput) recInput.oninput = actCambio;
 }
 
 // =================================================================== INVENTARIO
@@ -567,7 +1028,13 @@ function inventario() {
     .sort((a, b) => (a.stock / (a.minimo || 1)) - (b.stock / (b.minimo || 1)));
   $('#vista').innerHTML = `
   <section class="pagina">
-    <header class="p-head"><h1>inventario</h1>${admin ? '<button class="btn" id="nuevo-ins">+ nuevo insumo</button>' : ''}</header>
+    <header class="p-head">
+      <h1>inventario</h1>
+      <div class="p-acc">
+        <button class="btn btn-sm" id="csv-inv">exportar CSV</button>
+        ${admin ? '<button class="btn btn-sm btn-negro" id="nuevo-ins">+ nuevo insumo</button>' : ''}
+      </div>
+    </header>
     <hr class="regla">
     <div class="kpis kpis-3">
       <div class="kpi"><span>insumos</span><b>${act.length}</b></div>
@@ -596,6 +1063,17 @@ function inventario() {
   $$('[data-hist]').forEach(x => x.onclick = () => historial(Number(x.dataset.hist)));
   $$('[data-edit]').forEach(x => x.onclick = () => editarInsumo(insumo(Number(x.dataset.edit))));
   $('#nuevo-ins')?.addEventListener('click', () => editarInsumo(null));
+  $('#csv-inv')?.addEventListener('click', () => {
+    const filas = act.map(i => [
+      i.nombre,
+      i.unidad,
+      i.stock,
+      i.minimo,
+      i.costo || 0,
+      i.stock <= 0 ? 'agotado' : (i.stock <= i.minimo ? 'por acabarse' : 'ok')
+    ]);
+    descargarCSV('inventario-lacentral', ['Insumo', 'Unidad', 'Stock actual', 'Stock mínimo', 'Costo unitario', 'Estado'], filas);
+  });
 }
 function movimiento(id, tipo) {
   const i = insumo(id);

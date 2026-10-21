@@ -37,8 +37,28 @@ CREATE TABLE IF NOT EXISTS movimientos (
   id INTEGER PRIMARY KEY, fecha TEXT NOT NULL, insumo_id INTEGER NOT NULL REFERENCES insumos(id),
   tipo TEXT NOT NULL CHECK (tipo IN ('venta','compra','ajuste','merma','anulacion')),
   cantidad REAL NOT NULL, costo REAL, venta_id INTEGER, usuario_id INTEGER, nota TEXT);
+CREATE TABLE IF NOT EXISTS comandas (
+  id INTEGER PRIMARY KEY,
+  mesa TEXT NOT NULL,
+  cliente TEXT,
+  fecha TEXT NOT NULL,
+  estado TEXT NOT NULL DEFAULT 'pendiente',
+  total INTEGER NOT NULL DEFAULT 0,
+  notas TEXT
+);
+CREATE TABLE IF NOT EXISTS comanda_items (
+  id INTEGER PRIMARY KEY,
+  comanda_id INTEGER NOT NULL REFERENCES comandas(id) ON DELETE CASCADE,
+  producto_id TEXT NOT NULL,
+  nombre TEXT NOT NULL,
+  variante TEXT NOT NULL,
+  cantidad INTEGER NOT NULL,
+  precio INTEGER NOT NULL,
+  notas TEXT
+);
 CREATE INDEX IF NOT EXISTS ix_ventas_fecha ON ventas(fecha);
 CREATE INDEX IF NOT EXISTS ix_mov_insumo ON movimientos(insumo_id, fecha);
+CREATE INDEX IF NOT EXISTS ix_comandas_estado ON comandas(estado);
 `);
 
 // ---------- PIN ----------

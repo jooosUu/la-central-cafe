@@ -123,6 +123,9 @@ function registrarVenta(u, body) {
         mv.run(fecha, r.insumo_id, -q, r.costo * q, ventaId, u.id);
       }
     }
+    if (body.comanda_id) {
+      db.prepare(`UPDATE comandas SET estado = 'cobrado' WHERE id = ?`).run(Number(body.comanda_id));
+    }
     const alertas = db.prepare('SELECT nombre, stock, minimo, unidad FROM insumos WHERE activo = 1 AND stock <= minimo ORDER BY stock').all();
     return { id: ventaId, fecha, total, cambio: recibido != null ? recibido - total : null, alertas };
   });
@@ -244,11 +247,67 @@ function guardarProducto(body, actual) {
   return { nombre, categoria, precio, precio_combo: pc, descripcion, modelo, activo };
 }
 
+// ---------- comandas (pedidos de mesas / cocina) ----------
+function listarComandas() {
+  const cs = db.prepare(`SELECT * FROM comandas WHERE estado != 'archivado' ORDER BY id DESC LIMIT 100`).all();
+  const getItems = db.prepare(`SELECT * FROM comanda_items WHERE comanda_id = ?`);
+  return cs.map(c => ({ ...c, items: getItems.all(c.id) }));
+}
+
+function crearComanda(body) {
+  const mesa = texto(body?.mesa, 20) || 'Mesa 1';
+  const cliente = texto(body?.cliente, 60) || '';
+  const notas = texto(body?.notas, 300) || '';
+  const items = Array.isArray(body?.items) ? body.items : [];
+  if (!items.length) fail(400, 'La comanda debe incluir al menos un producto');
+
+  return tx(() => {
+    const fecha = ahora();
+    let total = 0;
+    const cid = Number(db.prepare(
+      `INSERT INTO comandas (mesa, cliente, fecha, estado, total, notas) VALUES (?,?,?, 'pendiente', 0, ?)`
+    ).run(mesa, cliente, fecha, notas).lastInsertRowid);
+
+    const insItem = db.prepare(
+      `INSERT INTO comanda_items (comanda_id, producto_id, nombre, variante, cantidad, precio, notas) VALUES (?,?,?,?,?,?,?)`
+    );
+    for (const it of items) {
+      const pid = String(it.id || it.producto_id || '');
+      const pr = db.prepare('SELECT nombre, precio, precio_combo FROM productos WHERE id = ?').get(pid);
+      const nombre = pr ? pr.nombre : texto(it.nombre, 60);
+      const variante = it.variante === 'combo' ? 'combo' : 'base';
+      const precio = pr ? (variante === 'combo' ? (pr.precio_combo || pr.precio) : pr.precio) : (Number(it.precio) || 0);
+      const cant = num(it.cantidad, { min: 1, max: 99, int: true }) || 1;
+      total += precio * cant;
+      insItem.run(cid, pid, nombre, variante, cant, precio, texto(it.notas, 150));
+    }
+    db.prepare('UPDATE comandas SET total = ? WHERE id = ?').run(total, cid);
+    const getItems = db.prepare(`SELECT * FROM comanda_items WHERE comanda_id = ?`);
+    return { id: cid, mesa, cliente, fecha, estado: 'pendiente', total, items: getItems.all(cid), notas };
+  });
+}
+
+function actualizarComanda(id, body) {
+  const c = db.prepare('SELECT * FROM comandas WHERE id = ?').get(id) || fail(404, 'Comanda no encontrada');
+  const estado = ['pendiente', 'preparando', 'listo', 'entregado', 'cobrado', 'archivado'].includes(body?.estado)
+    ? body.estado : c.estado;
+  db.prepare('UPDATE comandas SET estado = ? WHERE id = ?').run(estado, id);
+  const getItems = db.prepare(`SELECT * FROM comanda_items WHERE comanda_id = ?`);
+  return { ...db.prepare('SELECT * FROM comandas WHERE id = ?').get(id), items: getItems.all(id) };
+}
+
 // ---------- rutas ----------
 const rutas = [];
 const ruta = (m, re, fn) => rutas.push({ m, re: new RegExp('^' + re + '$'), fn });
 
 ruta('GET', '/api/carta', () => carta());
+ruta('GET', '/api/comandas', () => listarComandas());
+ruta('POST', '/api/comandas', ({ body }) => crearComanda(body));
+ruta('PUT', '/api/comandas/(\\d+)', ({ p, body }) => actualizarComanda(Number(p[1]), body));
+ruta('DELETE', '/api/comandas/(\\d+)', ({ p }) => {
+  db.prepare(`UPDATE comandas SET estado = 'archivado' WHERE id = ?`).run(Number(p[1]));
+  return { ok: true };
+});
 ruta('GET', '/api/usuarios-login', () => db.prepare('SELECT usuario, nombre FROM usuarios WHERE activo = 1 ORDER BY rol, nombre').all());
 ruta('GET', '/api/sesion', ({ u }) => (requiere(u), u));
 ruta('POST', '/api/login', ({ body, req, res }) => {
