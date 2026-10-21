@@ -117,8 +117,8 @@ function aplicarIdioma() {
   $('#lbl-nombre').textContent = t.tuNombre;
   $('#lbl-notas').textContent = t.notas;
   $('#lbl-total').textContent = t.totalPagar;
-  $('#btn-enviar-cocina span').textContent = t.enviarCocina;
-  $('#btn-enviar-wsp span').textContent = t.pedirWsp;
+  const btnWsp = $('#txt-pedir-wsp');
+  if (btnWsp) btnWsp.textContent = t.pedirWsp;
   $('#btn-vaciar-cart').textContent = t.vaciarPedido;
   const verMesa = $('#txt-ver-mesa');
   if (verMesa) verMesa.textContent = t.verEnMesa;
@@ -320,57 +320,26 @@ $('#cart-close').onclick = () => $('#cart-drawer').close();
 $('#btn-vaciar-cart').onclick = () => vaciarCarrito();
 $('#cart-drawer').addEventListener('click', e => { if (e.target === $('#cart-drawer')) $('#cart-drawer').close(); });
 
-// Enviar a Cocina (KDS directo)
-$('#btn-enviar-cocina').onclick = async () => {
+// Pedir por WhatsApp
+$('#btn-enviar-wsp').onclick = () => {
   if (!cart.length) return;
   const mesaSel = $('#cart-mesa-select').value || 'Mesa 1';
   const cliente = $('#cart-nombre-input').value.trim();
   const notas = $('#cart-notas-input').value.trim();
-  const comanda = {
-    mesa: mesaSel,
-    cliente: cliente || 'Cliente Menú',
-    notas: notas,
-    items: cart.map(it => ({
-      producto_id: it.id,
-      nombre: it.nombre + (it.variante === 'combo' ? ' (Combo)' : ''),
-      precio: it.precio,
-      variante: it.variante,
-      cantidad: it.cantidad
-    }))
-  };
+  const total = cart.reduce((acc, it) => acc + it.precio * it.cantidad, 0);
 
-  let ok = false;
-  try {
-    const ctrl = new AbortController(); setTimeout(() => ctrl.abort(), 2500);
-    const r = await fetch('/api/comandas', {
-      method: 'POST',
-      signal: ctrl.signal,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(comanda)
-    });
-    if (r.ok) ok = true;
-  } catch {}
+  let msg = `*☕ PEDIDO DESDE EL MENÚ DIGITAL - LA CENTRAL CAFÉ*\n`;
+  msg += `*${mesaSel}*${cliente ? ` · ${cliente}` : ''}\n`;
+  msg += `--------------------------------------\n`;
+  for (const it of cart) {
+    msg += `• ${it.cantidad}x ${it.nombre}${it.variante === 'combo' ? ' (Combo)' : ''} - ${fmt(it.precio * it.cantidad)}\n`;
+  }
+  msg += `--------------------------------------\n`;
+  msg += `*TOTAL:* ${fmt(total)}\n`;
+  if (notas) msg += `*Notas:* ${notas}\n`;
+  msg += `\n¡Hola! Les envío mi pedido desde el menú digital para confirmarlo. ¡Muchas gracias!`;
 
-  // Soporte cliente estático / Render demo mode
-  try {
-    const raw = localStorage.getItem('lc_demo_store');
-    const store = raw ? JSON.parse(raw) : {};
-    store.comandas = store.comandas || [];
-    const newId = (store.comandas[store.comandas.length - 1]?.id || 0) + 1;
-    store.comandas.push({
-      id: newId,
-      mesa: comanda.mesa,
-      cliente: comanda.cliente,
-      notas: comanda.notas,
-      estado: 'pendiente',
-      fecha: new Date().toISOString(),
-      items: comanda.items
-    });
-    localStorage.setItem('lc_demo_store', JSON.stringify(store));
-    localStorage.setItem('lc_comanda_ping', String(Date.now()));
-    window.dispatchEvent(new Event('storage'));
-    ok = true;
-  } catch {}
+  window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, '_blank');
 
   vaciarCarrito();
   $('#cart-drawer').close();
@@ -477,27 +446,6 @@ $('#btn-enviar-opinion')?.addEventListener('click', async () => {
   setTimeout(() => $('#modal-feedback')?.close(), 1600);
 });
 
-// Pedir por WhatsApp
-$('#btn-enviar-wsp').onclick = () => {
-  if (!cart.length) return;
-  const mesaSel = $('#cart-mesa-select').value || 'Mesa 1';
-  const cliente = $('#cart-nombre-input').value.trim();
-  const notas = $('#cart-notas-input').value.trim();
-  const total = cart.reduce((acc, it) => acc + it.precio * it.cantidad, 0);
-
-  let msg = `*☕ PEDIDO DESDE EL MENÚ DIGITAL - LA CENTRAL CAFÉ*\n`;
-  msg += `*${mesaSel}*${cliente ? ` · ${cliente}` : ''}\n`;
-  msg += `--------------------------------------\n`;
-  for (const it of cart) {
-    msg += `• ${it.cantidad}x ${it.nombre}${it.variante === 'combo' ? ' (Combo)' : ''} - ${fmt(it.precio * it.cantidad)}\n`;
-  }
-  msg += `--------------------------------------\n`;
-  msg += `*TOTAL:* ${fmt(total)}\n`;
-  if (notas) msg += `*Notas:* ${notas}\n`;
-  msg += `\n¡Por favor confirmar pedido!`;
-
-  window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, '_blank');
-};
 
 // =================================================================== RENDERIZADO CARTA
 const tabs = $('#tabs'), carta = $('#carta');
