@@ -308,6 +308,20 @@ ruta('DELETE', '/api/comandas/(\\d+)', ({ p }) => {
   db.prepare(`UPDATE comandas SET estado = 'archivado' WHERE id = ?`).run(Number(p[1]));
   return { ok: true };
 });
+ruta('GET', '/api/feedback', ({ u }) => {
+  requiere(u);
+  return db.prepare('SELECT * FROM feedback ORDER BY id DESC LIMIT 100').all();
+});
+ruta('POST', '/api/feedback', ({ body }) => {
+  const estrellas = num(body?.estrellas, { min: 1, max: 5, int: true }) || 5;
+  const comentario = texto(body?.comentario, 500) || '';
+  const mesa = texto(body?.mesa, 30) || 'Mesa';
+  const cliente = texto(body?.cliente, 60) || '';
+  const fecha = ahora();
+  db.prepare('INSERT INTO feedback (fecha, estrellas, comentario, mesa, cliente) VALUES (?,?,?,?,?)')
+    .run(fecha, estrellas, comentario, mesa, cliente);
+  return { ok: true, estrellas, fecha };
+});
 ruta('GET', '/api/usuarios-login', () => db.prepare('SELECT usuario, nombre FROM usuarios WHERE activo = 1 ORDER BY rol, nombre').all());
 ruta('GET', '/api/sesion', ({ u }) => (requiere(u), u));
 ruta('POST', '/api/login', ({ body, req, res }) => {

@@ -8,7 +8,7 @@
 <link rel="icon" href="img/taza.svg">
 <link rel="preload" href="fonts/Utendo-ExtraBold.ttf" as="font" type="font/ttf" crossorigin>
 <link rel="preload" href="fonts/Utendo-Medium.ttf" as="font" type="font/ttf" crossorigin>
-<link rel="stylesheet" href="styles.css?v=15">
+<link rel="stylesheet" href="styles.css?v=16">
 <script type="module" src="vendor/model-viewer.min.js"></script>
 </head>
 <body>
@@ -20,6 +20,7 @@
     <span class="mesa" id="mesa" hidden></span>
   </div>
   <div class="top-actions">
+    <button type="button" class="btn-review-pill" id="btn-open-review" aria-label="Calificar en Google Maps">⭐ <span id="txt-review-pill">califícanos</span></button>
     <button type="button" class="btn-lang" id="btn-lang" aria-label="Cambiar idioma"><span id="lang-label">EN</span></button>
     <a href="/caja/" class="btn-comanda-switch" aria-label="Abrir app de comanda y caja">
       <span class="sw-badge">🧾 caja / comanda</span>
@@ -119,12 +120,95 @@
   </div>
 </dialog>
 
+<!-- Sección Social & Google Maps -->
+<section class="social-hub" id="social-hub" aria-label="Ubicación y redes">
+  <div class="social-cards">
+    <div class="social-card sc-maps">
+      <div class="sc-badge">📍 GOOGLE MAPS · 5.0 ★</div>
+      <h3 id="txt-maps-title">visítanos en Tunja</h3>
+      <p id="txt-maps-desc">La Central Café · Calidad de origen, filtrados y buena vibra en Tunja, Boyacá.</p>
+      <div class="sc-actions">
+        <a href="https://www.google.com/maps/place/La+Central+Caf%C3%A9/@5.5591249,-73.3519444,17z/data=!3m1!4b1!4m6!3m5!1s0x8e6a7db7cf35b097:0xa33f85c90770b3aa!8m2!3d5.5591249!4d-73.3493695!16s%2Fg%2F11nw2z8k38?entry=ttu" target="_blank" rel="noopener" class="btn-sc btn-sc-maps">
+          <span>📍 Cómo llegar</span>
+        </a>
+        <button type="button" class="btn-sc btn-sc-rate" id="btn-footer-review">
+          <span>⭐ Dejar 5★ en Google</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="social-card sc-ig">
+      <div class="sc-badge">📸 COMUNIDAD</div>
+      <h3>@lacentral.tunja</h3>
+      <p id="txt-ig-desc">Fotos de nuestros cafés de origen, nuevos granos, métodos de extracción y eventos especiales.</p>
+      <div class="sc-actions">
+        <a href="https://www.instagram.com/lacentral.tunja/" target="_blank" rel="noopener" class="btn-sc btn-sc-ig">
+          <span>📸 Seguir en Instagram</span>
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
 <footer class="foot">
   <div class="foot-logo" id="foot-logo" aria-hidden="true"></div>
   <div class="iconos iconos-inv" id="iconos-foot" aria-hidden="true"></div>
   <p id="txt-pie-precios">Precios en pesos colombianos</p>
   <p class="test" id="txt-pie-test">La Central Café · Calidad de origen</p>
 </footer>
+
+<!-- Modal de Encuesta y Redirección Directa a Google Maps -->
+<dialog id="modal-feedback" class="feedback-dialog" aria-labelledby="fb-title">
+  <div class="fb-box">
+    <button type="button" class="fb-close" id="btn-fb-top-close" aria-label="Cerrar">×</button>
+    <header class="fb-head">
+      <div class="fb-top-pill" id="fb-top-pill">☕ La Central Café</div>
+      <h2 id="fb-title">¡pedido en cocina!</h2>
+      <p class="fb-subtitle" id="fb-subtitle">Tu orden está siendo preparada. En breve te la llevamos a tu mesa.</p>
+    </header>
+
+    <div class="fb-body">
+      <div class="fb-question-box">
+        <p class="fb-question" id="fb-question">¿Cómo va tu experiencia hoy con nosotros?</p>
+        <div class="fb-stars" id="fb-stars" role="radiogroup" aria-label="Calificación de 1 a 5 estrellas">
+          <button type="button" class="fb-star" data-val="1" aria-label="1 estrella">★</button>
+          <button type="button" class="fb-star" data-val="2" aria-label="2 estrellas">★</button>
+          <button type="button" class="fb-star" data-val="3" aria-label="3 estrellas">★</button>
+          <button type="button" class="fb-star" data-val="4" aria-label="4 estrellas">★</button>
+          <button type="button" class="fb-star" data-val="5" aria-label="5 estrellas">★</button>
+        </div>
+        <p class="fb-star-text" id="fb-star-text">Toca las estrellas para calificar</p>
+      </div>
+
+      <!-- Si califica 4 o 5 estrellas: Google Maps y Redes -->
+      <div class="fb-flow fb-flow-high" id="fb-flow-high" hidden>
+        <p class="fb-cheer-title" id="fb-cheer-title">¡Nos alegra mucho! 😍</p>
+        <p class="fb-cheer-desc" id="fb-cheer-desc">Tu reseña de 5 estrellas nos ayuda un montón a que más personas descubran nuestro café en Tunja. ¿Nos regalas tu opinión en Google Maps?</p>
+        <a href="https://www.google.com/maps/place/La+Central+Caf%C3%A9/@5.5591249,-73.3519444,17z/data=!3m1!4b1!4m6!3m5!1s0x8e6a7db7cf35b097:0xa33f85c90770b3aa!8m2!3d5.5591249!4d-73.3493695!16s%2Fg%2F11nw2z8k38?entry=ttu" target="_blank" rel="noopener" class="btn-fb-action btn-fb-google" id="btn-fb-google-direct">
+          <span>⭐ Dejar reseña de 5★ en Google Maps</span>
+        </a>
+        <a href="https://www.instagram.com/lacentral.tunja/" target="_blank" rel="noopener" class="btn-fb-action btn-fb-instagram">
+          <span>📸 Seguirnos en Instagram @lacentral.tunja</span>
+        </a>
+      </div>
+
+      <!-- Si califica 1, 2 o 3 estrellas: sugerencia constructiva privada -->
+      <div class="fb-flow fb-flow-low" id="fb-flow-low" hidden>
+        <p class="fb-low-title" id="fb-low-title">Queremos que tu visita sea perfecta</p>
+        <p class="fb-low-desc" id="fb-low-desc">Cuéntanos qué podemos solucionar o mejorar para ti antes de que te vayas:</p>
+        <textarea id="fb-comentario" placeholder="Escribe aquí tu observación..." rows="3" maxlength="400"></textarea>
+        <button type="button" class="btn-fb-action btn-fb-send" id="btn-enviar-opinion">
+          <span id="txt-send-opinion">Enviar sugerencia a la barra</span>
+        </button>
+        <p class="fb-sent-ok" id="fb-sent-ok" hidden>✓ ¡Gracias por tus comentarios! Ya se lo notificamos al equipo.</p>
+      </div>
+    </div>
+
+    <footer class="fb-footer">
+      <button type="button" class="btn-fb-close" id="btn-fb-close">Volver a la carta</button>
+    </footer>
+  </div>
+</dialog>
 
 <!-- Visor 3D / AR -->
 <dialog id="visor" aria-labelledby="v-nombre">
@@ -150,6 +234,6 @@
   </div>
 </dialog>
 
-<script type="module" src="app.js?v=15"></script>
+<script type="module" src="app.js?v=16"></script>
 </body>
 </html>

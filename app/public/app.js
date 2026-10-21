@@ -458,8 +458,11 @@ function generarTicketHtml(venta) {
       <div class="t-linea"><span>Medio de pago:</span><span>${String(venta.pago || '').toUpperCase()}</span></div>
       ${venta.cambio != null ? `<div class="t-linea"><span>Cambio:</span><span>${cop(venta.cambio)}</span></div>` : ''}
       <div class="t-sep"></div>
-      <div class="t-center" style="margin-top:6px; font-size:11px;">¡Gracias por tu visita!</div>
-      <div class="t-center" style="font-size:10px; color:#555;">lacentralcafe.onrender.com</div>
+      <div class="t-center t-bold" style="margin-top:6px; font-size:11px;">¡Gracias por tu visita!</div>
+      <div class="t-center" style="font-size:10px;">📸 IG: @lacentral.tunja</div>
+      <div class="t-center" style="font-size:10px;">📍 Tunja · La Central Café</div>
+      <div class="t-center t-bold" style="font-size:9.5px; margin-top:3px;">⭐ ¡Califícanos en Google Maps!</div>
+      <div class="t-center" style="font-size:9px; color:#555; margin-top:2px;">lacentralcafe.onrender.com</div>
     </div>
   `;
 }
@@ -486,7 +489,10 @@ function compartirTicketWhatsApp(venta) {
   if (venta.propina) txt += `*Propina voluntaria:* ${cop(venta.propina)}\n`;
   txt += `*TOTAL:* ${cop(venta.total)} (${String(venta.pago || '').toUpperCase()})\n`;
   if (venta.cambio != null) txt += `*Cambio entregado:* ${cop(venta.cambio)}\n`;
-  txt += `\n¡Gracias por tu compra en La Central Café! ☕`;
+  txt += `\n¡Gracias por tu compra en La Central Café! ☕\n\n`;
+  txt += `📍 *Google Maps:* https://www.google.com/maps/place/La+Central+Caf%C3%A9/@5.5591249,-73.3519444,17z/data=!3m1!4b1!4m6!3m5!1s0x8e6a7db7cf35b097:0xa33f85c90770b3aa!8m2!3d5.5591249!4d-73.3493695!16s%2Fg%2F11nw2z8k38\n`;
+  txt += `📸 *Instagram:* https://www.instagram.com/lacentral.tunja/\n`;
+  txt += `⭐ ¿Cómo estuvo tu café? ¡Déjanos tu reseña en Google! ✨`;
   window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(txt)}`, '_blank');
 }
 
@@ -1247,6 +1253,13 @@ async function ajustes() {
     <h2 class="sub">${admin ? 'usuarios y PIN' : 'mi PIN'}</h2>
     <ul class="leaders">${usuarios.map(u => `<li><span class="nom">${esc(u.nombre)} <small class="muted">${u.rol}</small></span><span class="dots"></span>
       <button class="btn btn-sm" data-pin="${u.id}">cambiar PIN</button></li>`).join('')}</ul>
+
+    <h2 class="sub">canales y redes oficiales</h2>
+    <p class="muted">Enlaces directos a la ficha de Google Maps e Instagram para verificar reseñas o compartir con clientes.</p>
+    <div style="display:flex; flex-wrap:wrap; gap:10px; margin: 12px 0 24px;">
+      <a class="btn btn-sm" href="https://www.google.com/maps/place/La+Central+Caf%C3%A9/@5.5591249,-73.3519444,17z/data=!3m1!4b1!4m6!3m5!1s0x8e6a7db7cf35b097:0xa33f85c90770b3aa!8m2!3d5.5591249!4d-73.3493695!16s%2Fg%2F11nw2z8k38" target="_blank" rel="noopener">📍 Google Maps · Reseñas</a>
+      <a class="btn btn-sm" href="https://www.instagram.com/lacentral.tunja/" target="_blank" rel="noopener">📸 Instagram @lacentral.tunja</a>
+    </div>
   </section>`;
   $$('tr[data-p]').forEach(tr => {
     const guardar = async (campo, valor) => {

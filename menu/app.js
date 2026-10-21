@@ -37,7 +37,24 @@ const I18N = {
     calidadPie: 'La Central Café · Calidad de origen',
     pedidoVacio: 'Aún no has agregado productos a tu pedido.',
     pedidoEnviadoOk: '✅ ¡Pedido enviado a la cocina! Tu orden fue registrada. En breve te lo servimos a la mesa.',
-    mesaPrefijo: 'mesa '
+    mesaPrefijo: 'mesa ',
+    reviewPill: 'califícanos',
+    mapsTitle: 'visítanos en Tunja',
+    mapsDesc: 'La Central Café · Calidad de origen, filtrados y buena vibra en Tunja, Boyacá.',
+    igDesc: 'Fotos de nuestros cafés de origen, nuevos granos, métodos de extracción y eventos especiales.',
+    fbTitle: '¡pedido en cocina!',
+    fbSubtitle: 'Tu orden está siendo preparada. En breve te la llevamos a tu mesa.',
+    fbQuestion: '¿Cómo va tu experiencia hoy con nosotros?',
+    fbStarHint: 'Toca las estrellas para calificar',
+    fbCheerTitle: '¡Nos alegra mucho! 😍',
+    fbCheerDesc: 'Tu reseña de 5 estrellas nos ayuda un montón a que más personas descubran nuestro café en Tunja. ¿Nos regalas tu opinión en Google Maps?',
+    fbGoogleBtn: '⭐ Dejar reseña de 5★ en Google Maps',
+    fbIgBtn: '📸 Seguirnos en Instagram @lacentral.tunja',
+    fbLowTitle: 'Queremos que tu visita sea perfecta',
+    fbLowDesc: 'Cuéntanos qué podemos solucionar o mejorar para ti antes de que te vayas:',
+    fbSendBtn: 'Enviar sugerencia a la barra',
+    fbSentOk: '✓ ¡Gracias por tus comentarios! Ya se lo notificamos al equipo.',
+    fbBackBtn: 'Volver a la carta'
   },
   en: {
     langCode: 'ES',
@@ -65,7 +82,24 @@ const I18N = {
     calidadPie: 'La Central Café · Origin Coffee',
     pedidoVacio: 'Your order is currently empty.',
     pedidoEnviadoOk: '✅ Order sent to kitchen! Your ticket is registered. We will bring it to your table shortly.',
-    mesaPrefijo: 'table '
+    mesaPrefijo: 'table ',
+    reviewPill: 'review us',
+    mapsTitle: 'visit us in Tunja',
+    mapsDesc: 'La Central Café · Specialty origin coffee, pour-overs and good vibes in Tunja, Boyacá.',
+    igDesc: 'Photos of our origin beans, brewing methods, specialty coffee and community events.',
+    fbTitle: 'order in kitchen!',
+    fbSubtitle: 'Your order is being prepared. We will bring it to your table shortly.',
+    fbQuestion: 'How is your experience with us today?',
+    fbStarHint: 'Tap the stars to rate',
+    fbCheerTitle: 'We are thrilled! 😍',
+    fbCheerDesc: 'Your 5-star review helps more coffee lovers find us in Tunja. Would you leave us a review on Google Maps?',
+    fbGoogleBtn: '⭐ Leave a 5★ review on Google Maps',
+    fbIgBtn: '📸 Follow on Instagram @lacentral.tunja',
+    fbLowTitle: 'We want your visit to be perfect',
+    fbLowDesc: 'Tell us what we can improve or fix for you right now:',
+    fbSendBtn: 'Send feedback to the bar',
+    fbSentOk: '✓ Thank you for your feedback! The team has been notified.',
+    fbBackBtn: 'Back to menu'
   }
 };
 let lang = localStorage.getItem('lc_lang') === 'en' ? 'en' : 'es';
@@ -88,6 +122,38 @@ function aplicarIdioma() {
   $('#btn-vaciar-cart').textContent = t.vaciarPedido;
   const verMesa = $('#txt-ver-mesa');
   if (verMesa) verMesa.textContent = t.verEnMesa;
+  const revPill = $('#txt-review-pill');
+  if (revPill) revPill.textContent = t.reviewPill;
+  const mt = $('#txt-maps-title');
+  if (mt) mt.textContent = t.mapsTitle;
+  const md = $('#txt-maps-desc');
+  if (md) md.textContent = t.mapsDesc;
+  const id = $('#txt-ig-desc');
+  if (id) id.textContent = t.igDesc;
+  const fbt = $('#fb-title');
+  if (fbt) fbt.textContent = t.fbTitle;
+  const fbs = $('#fb-subtitle');
+  if (fbs) fbs.textContent = t.fbSubtitle;
+  const fbq = $('#fb-question');
+  if (fbq) fbq.textContent = t.fbQuestion;
+  const fbst = $('#fb-star-text');
+  if (fbst) fbst.textContent = t.fbStarHint;
+  const fbct = $('#fb-cheer-title');
+  if (fbct) fbct.textContent = t.fbCheerTitle;
+  const fbcd = $('#fb-cheer-desc');
+  if (fbcd) fbcd.textContent = t.fbCheerDesc;
+  const fbg = $('#btn-fb-google-direct span');
+  if (fbg) fbg.textContent = t.fbGoogleBtn;
+  const fbi = $('.btn-fb-instagram span');
+  if (fbi) fbi.textContent = t.fbIgBtn;
+  const fblt = $('#fb-low-title');
+  if (fblt) fblt.textContent = t.fbLowTitle;
+  const fbld = $('#fb-low-desc');
+  if (fbld) fbld.textContent = t.fbLowDesc;
+  const fbsb = $('#txt-send-opinion');
+  if (fbsb) fbsb.textContent = t.fbSendBtn;
+  const fbb = $('#btn-fb-close');
+  if (fbb) fbb.textContent = t.fbBackBtn;
 }
 
 $('#btn-lang').onclick = () => {
@@ -308,8 +374,108 @@ $('#btn-enviar-cocina').onclick = async () => {
 
   vaciarCarrito();
   $('#cart-drawer').close();
-  alert(I18N[lang].pedidoEnviadoOk);
+  abrirModalFeedback(mesaSel, cliente, true);
 };
+
+// =================================================================== ENCUESTA, FEEDBACK Y GOOGLE MAPS
+let feedbackState = { estrellas: 5, mesa: 'Mesa 1', cliente: '' };
+
+function abrirModalFeedback(mesa = 'Mesa 1', cliente = '', vieneDePedido = false) {
+  feedbackState.mesa = mesa || 'Mesa 1';
+  feedbackState.cliente = cliente || '';
+  const modal = $('#modal-feedback');
+  if (!modal) return;
+
+  const topPill = $('#fb-top-pill');
+  if (topPill) topPill.textContent = vieneDePedido ? `☕ ${mesa} · La Central Café` : '☕ La Central Café · Tunja';
+
+  const title = $('#fb-title');
+  if (title) title.textContent = vieneDePedido ? I18N[lang].fbTitle : (lang === 'en' ? 'how was your visit?' : '¿cómo estuvo tu visita?');
+
+  const sub = $('#fb-subtitle');
+  if (sub) sub.textContent = vieneDePedido ? I18N[lang].fbSubtitle : (lang === 'en' ? 'Your review helps us keep brewing the best specialty coffee.' : 'Tu opinión nos ayuda a seguir preparando el mejor café de especialidad.');
+
+  const flowHigh = $('#fb-flow-high');
+  if (flowHigh) flowHigh.hidden = true;
+  const flowLow = $('#fb-flow-low');
+  if (flowLow) flowLow.hidden = true;
+  const sentOk = $('#fb-sent-ok');
+  if (sentOk) sentOk.hidden = true;
+  const comm = $('#fb-comentario');
+  if (comm) comm.value = '';
+
+  actualizarEstrellas(0);
+  const starText = $('#fb-star-text');
+  if (starText) starText.textContent = I18N[lang].fbStarHint;
+
+  modal.showModal();
+}
+
+function actualizarEstrellas(n) {
+  $$('#fb-stars .fb-star').forEach(s => {
+    const v = Number(s.dataset.val);
+    s.classList.toggle('active', v <= n);
+  });
+}
+
+function seleccionarEstrellas(n) {
+  feedbackState.estrellas = n;
+  actualizarEstrellas(n);
+
+  const starText = $('#fb-star-text');
+  const flowHigh = $('#fb-flow-high');
+  const flowLow = $('#fb-flow-low');
+
+  if (n >= 4) {
+    if (starText) starText.textContent = n === 5 ? (lang === 'en' ? '⭐⭐⭐⭐⭐ Excellent!' : '⭐⭐⭐⭐⭐ ¡Excelente!') : (lang === 'en' ? '⭐⭐⭐⭐ Very Good!' : '⭐⭐⭐⭐ ¡Muy bueno!');
+    if (flowHigh) flowHigh.hidden = false;
+    if (flowLow) flowLow.hidden = true;
+    enviarFeedbackSilencioso(n, '');
+  } else {
+    if (starText) starText.textContent = n === 1 ? (lang === 'en' ? '⭐ Fair' : '⭐ Regular') : `${n} ${lang === 'en' ? 'stars' : 'estrellas'}`;
+    if (flowHigh) flowHigh.hidden = true;
+    if (flowLow) flowLow.hidden = false;
+  }
+}
+
+async function enviarFeedbackSilencioso(estrellas, comentario) {
+  try {
+    await fetch('/api/feedback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        estrellas,
+        comentario,
+        mesa: feedbackState.mesa,
+        cliente: feedbackState.cliente
+      })
+    });
+  } catch {}
+  try {
+    const list = JSON.parse(localStorage.getItem('lc_feedback') || '[]');
+    list.push({ estrellas, comentario, mesa: feedbackState.mesa, cliente: feedbackState.cliente, fecha: new Date().toISOString() });
+    localStorage.setItem('lc_feedback', JSON.stringify(list));
+  } catch {}
+}
+
+$('#btn-fb-top-close')?.addEventListener('click', () => $('#modal-feedback')?.close());
+$('#btn-fb-close')?.addEventListener('click', () => $('#modal-feedback')?.close());
+$('#modal-feedback')?.addEventListener('click', e => { if (e.target === $('#modal-feedback')) $('#modal-feedback').close(); });
+
+$$('#fb-stars .fb-star').forEach(b => {
+  b.onclick = () => seleccionarEstrellas(Number(b.dataset.val));
+});
+
+$('#btn-open-review')?.addEventListener('click', () => abrirModalFeedback($('#mesa')?.textContent || 'Mesa 1', '', false));
+$('#btn-footer-review')?.addEventListener('click', () => abrirModalFeedback($('#mesa')?.textContent || 'Mesa 1', '', false));
+
+$('#btn-enviar-opinion')?.addEventListener('click', async () => {
+  const comm = $('#fb-comentario')?.value?.trim() || '';
+  await enviarFeedbackSilencioso(feedbackState.estrellas, comm);
+  const sentOk = $('#fb-sent-ok');
+  if (sentOk) sentOk.hidden = false;
+  setTimeout(() => $('#modal-feedback')?.close(), 1600);
+});
 
 // Pedir por WhatsApp
 $('#btn-enviar-wsp').onclick = () => {

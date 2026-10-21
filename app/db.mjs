@@ -56,9 +56,18 @@ CREATE TABLE IF NOT EXISTS comanda_items (
   precio INTEGER NOT NULL,
   notas TEXT
 );
+CREATE TABLE IF NOT EXISTS feedback (
+  id INTEGER PRIMARY KEY,
+  fecha TEXT NOT NULL,
+  estrellas INTEGER NOT NULL,
+  comentario TEXT,
+  mesa TEXT,
+  cliente TEXT
+);
 CREATE INDEX IF NOT EXISTS ix_ventas_fecha ON ventas(fecha);
 CREATE INDEX IF NOT EXISTS ix_mov_insumo ON movimientos(insumo_id, fecha);
 CREATE INDEX IF NOT EXISTS ix_comandas_estado ON comandas(estado);
+CREATE INDEX IF NOT EXISTS ix_feedback_fecha ON feedback(fecha);
 `);
 
 // ---------- PIN ----------
@@ -141,6 +150,9 @@ export function migrar() {
   const cols = db.prepare('PRAGMA table_info(productos)').all().map(c => c.name);
   if (!cols.includes('descripcion')) db.exec('ALTER TABLE productos ADD COLUMN descripcion TEXT');
   if (!cols.includes('modelo')) db.exec('ALTER TABLE productos ADD COLUMN modelo TEXT');
+  db.exec(`CREATE TABLE IF NOT EXISTS feedback (
+    id INTEGER PRIMARY KEY, fecha TEXT NOT NULL, estrellas INTEGER NOT NULL,
+    comentario TEXT, mesa TEXT, cliente TEXT)`);
   db.exec(`CREATE TABLE IF NOT EXISTS categorias (
     id TEXT PRIMARY KEY, nombre TEXT NOT NULL, seccion TEXT NOT NULL,
     tipo TEXT NOT NULL CHECK (tipo IN ('destacado','lista')), orden INTEGER NOT NULL DEFAULT 0)`);
