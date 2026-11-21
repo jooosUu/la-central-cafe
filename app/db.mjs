@@ -64,10 +64,16 @@ CREATE TABLE IF NOT EXISTS feedback (
   mesa TEXT,
   cliente TEXT
 );
+CREATE TABLE IF NOT EXISTS sesiones (
+  token TEXT PRIMARY KEY,
+  usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+  exp INTEGER NOT NULL
+);
 CREATE INDEX IF NOT EXISTS ix_ventas_fecha ON ventas(fecha);
 CREATE INDEX IF NOT EXISTS ix_mov_insumo ON movimientos(insumo_id, fecha);
 CREATE INDEX IF NOT EXISTS ix_comandas_estado ON comandas(estado);
 CREATE INDEX IF NOT EXISTS ix_feedback_fecha ON feedback(fecha);
+CREATE INDEX IF NOT EXISTS ix_sesiones_exp ON sesiones(exp);
 `);
 
 // ---------- PIN ----------
@@ -150,6 +156,12 @@ export function migrar() {
   const cols = db.prepare('PRAGMA table_info(productos)').all().map(c => c.name);
   if (!cols.includes('descripcion')) db.exec('ALTER TABLE productos ADD COLUMN descripcion TEXT');
   if (!cols.includes('modelo')) db.exec('ALTER TABLE productos ADD COLUMN modelo TEXT');
+  const vcols = db.prepare('PRAGMA table_info(ventas)').all().map(c => c.name);
+  if (!vcols.includes('mesa')) db.exec('ALTER TABLE ventas ADD COLUMN mesa TEXT');
+  if (!vcols.includes('propina')) db.exec('ALTER TABLE ventas ADD COLUMN propina INTEGER NOT NULL DEFAULT 0');
+  db.exec(`CREATE TABLE IF NOT EXISTS sesiones (
+    token TEXT PRIMARY KEY, usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE, exp INTEGER NOT NULL)`);
+  db.exec('CREATE INDEX IF NOT EXISTS ix_sesiones_exp ON sesiones(exp)');
   db.exec(`CREATE TABLE IF NOT EXISTS feedback (
     id INTEGER PRIMARY KEY, fecha TEXT NOT NULL, estrellas INTEGER NOT NULL,
     comentario TEXT, mesa TEXT, cliente TEXT)`);
@@ -174,11 +186,14 @@ export function migrar() {
 }
 
 // ---------- copia de seguridad diaria automática (data/respaldos, se guardan 14) ----------
+function fechaBogota(d = new Date()) {
+  return new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Bogota', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+}
 export function respaldoDiario() {
   if (process.env.LACENTRAL_DB) return null;           // no respaldar bases de prueba
   const dir = new URL('respaldos/', DATA);
   mkdirSync(dir, { recursive: true });
-  const d = new Date(), f = `lacentral-${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}.db`;
+  const f = `lacentral-${fechaBogota()}.db`;
   const destino = fileURLToPath(new URL(f, dir));
   if (!existsSync(destino)) db.exec(`VACUUM INTO '${destino.replace(/'/g, "''")}'`);
   const viejos = readdirSync(dir).filter(x => /^lacentral-\d{4}-\d{2}-\d{2}\.db$/.test(x)).sort().slice(0, -14);

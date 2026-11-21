@@ -305,13 +305,7 @@ dialog::backdrop { background: rgba(0, 0, 0, .55); }
   .grid-big { grid-template-columns: 1fr; }
 }
 
-/* ---------- impresión (cierre de caja) ---------- */
-@media print {
-  body * { visibility: hidden; }
-  #cierre-print, #cierre-print * { visibility: visible; }
-  #cierre-print { position: absolute; inset: 0; padding: 16px; }
-  #cierre-print input { border: 0; }
-}
+/* ---------- impresión (cierre de caja, QR y ticket térmico) ---------- */
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 
 /* ---------- ajustes v2: productos, QR ---------- */
@@ -331,13 +325,6 @@ dialog::backdrop { background: rgba(0, 0, 0, .55); }
   .qr-form .btn { grid-column: 1 / -1; }
   .tabla-prod td.acc { grid-column: 1 / -1; display: flex; gap: 4px; margin-top: -4px; }
   .tabla-prod .btn-sm.link { min-height: 32px; padding: 0 8px 0 0; }
-}
-@media print {
-  .imprimible, .imprimible * { visibility: visible; }
-  .imprimible { position: absolute; inset: 0; padding: 12mm; }
-  .qr-grid { grid-template-columns: repeat(3, 1fr); gap: 8mm; }
-  dialog#modal { position: static; box-shadow: none; max-height: none; width: 100%; border: 0; }
-  dialog#modal .m-body { max-height: none; overflow: visible; }
 }
 
 /* ===================================================================
@@ -435,12 +422,35 @@ dialog::backdrop { background: rgba(0, 0, 0, .55); }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .7; } }
 .inv-filtros { display: flex; gap: var(--s2); margin-bottom: var(--s4); flex-wrap: wrap; }
 
-/* ---------- TICKET TERMICO IMPRESION ---------- */
+/* ---------- IMPRESION UNIFICADA (TICKET, CIERRE, QR) ---------- */
 .ticket-print-area { display: none; }
+
+/* ---------- ticket térmico (80 mm, solo negro: las térmicas no imprimen color) ----------
+   Estilo recibo: letra de máquina en mayúsculas, todo centrado, marca arriba y mancha de tinta abajo. */
+@font-face { font-family: 'Space Mono'; src: url(/fonts/SpaceMono-Regular.ttf); font-weight: 400; font-display: swap; }
+@font-face { font-family: 'Space Mono'; src: url(/fonts/SpaceMono-Bold.ttf); font-weight: 700; font-display: swap; }
+.ticket-termico { width: 68mm; color: #000; background: #fff; font: 400 10.5px/1.45 'Space Mono', 'Courier New', monospace; letter-spacing: .02em; }
+.ticket-termico img { display: block; margin: 0 auto; }
+.tk-marca { width: 13mm; margin-top: 2mm !important; }
+.tk-logo { width: 62%; margin-top: 3mm !important; }
+.tk-titulo { text-align: center; font-size: 13px; line-height: 1.35; margin-top: 5mm; letter-spacing: .04em; }
+.tk-datos { margin-top: 5mm; font-size: 9.5px; }
+.tk-items { margin-top: 5mm; }
+.tk-fila { display: flex; justify-content: space-between; gap: 8px; }
+.tk-fila span:first-child { min-width: 0; }
+.tk-fila span:last-child { flex: none; font-variant-numeric: tabular-nums; }
+.tk-total { margin-top: 5mm; font-size: 13px; font-weight: 700; }
+.tk-aviso { text-align: center; font-size: 9px; margin-top: 3mm; }
+.tk-pie2 { margin-top: 6mm; font-size: 9.5px; }
+.tk-gracias { text-align: center; font-weight: 700; margin-top: 6mm; }
+.tk-pie { text-align: center; font-size: 8.5px; margin-top: 1mm; }
+.tk-mancha { width: 40mm; margin-top: 5mm !important; filter: blur(1.6px); opacity: .9; }
+
 @media print {
   body * { visibility: hidden !important; }
-  .ticket-print-area, .ticket-print-area * { visibility: visible !important; }
-  .ticket-print-area {
+  body[data-print="ticket"] .ticket-print-area,
+  body[data-print="ticket"] .ticket-print-area * { visibility: visible !important; }
+  body[data-print="ticket"] .ticket-print-area {
     display: block !important;
     position: absolute;
     left: 0;
@@ -448,15 +458,20 @@ dialog::backdrop { background: rgba(0, 0, 0, .55); }
     width: 68mm;
     margin: 0;
     padding: 3mm;
-    font-family: 'Courier New', Courier, monospace;
-    font-size: 12px;
-    line-height: 1.25;
     color: #000;
     background: #fff;
   }
-  .t-center { text-align: center; }
-  .t-bold { font-weight: bold; }
-  .t-sep { border-bottom: 1px dashed #000; margin: 4px 0; }
-  .t-linea { display: flex; justify-content: space-between; }
+  body[data-print="cierre"] #cierre-print,
+  body[data-print="cierre"] #cierre-print * { visibility: visible !important; }
+  body[data-print="cierre"] #cierre-print { position: absolute; inset: 0; padding: 16px; background: #fff; }
+  body[data-print="cierre"] #cierre-print input { border: 0; }
+  body[data-print="cierre"] dialog#modal,
+  body[data-print="qr"] dialog#modal { position: static; box-shadow: none; max-height: none; width: 100%; border: 0; }
+  body[data-print="cierre"] dialog#modal .m-body,
+  body[data-print="qr"] dialog#modal .m-body { max-height: none; overflow: visible; }
+  body[data-print="qr"] .imprimible,
+  body[data-print="qr"] .imprimible * { visibility: visible !important; }
+  body[data-print="qr"] .imprimible { position: absolute; inset: 0; padding: 12mm; background: #fff; }
+  body[data-print="qr"] .qr-grid { grid-template-columns: repeat(3, 1fr); gap: 8mm; }
 }
 

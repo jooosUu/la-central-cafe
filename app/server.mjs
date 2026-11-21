@@ -31,8 +31,13 @@ try { const r = respaldoDiario(); if (r) console.log('  Respaldo del día: ' + r
 setInterval(() => { try { respaldoDiario(); } catch {} }, 3600_000).unref();
 
 // ---------- utilidades ----------
-const pad = n => String(n).padStart(2, '0');
-const ahora = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+const fmtBogota = new Intl.DateTimeFormat('sv-SE', {
+  timeZone: 'America/Bogota',
+  year: 'numeric', month: '2-digit', day: '2-digit',
+  hour: '2-digit', minute: '2-digit', second: '2-digit',
+  hour12: false,
+});
+const ahora = (d = new Date()) => fmtBogota.format(d);
 const hoy = () => ahora().slice(0, 10);
 const isDate = s => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
 const num = (v, { min = -Infinity, max = Infinity, int = false } = {}) => {
@@ -51,17 +56,41 @@ function tx(fn) {
   try { const r = fn(); db.exec('COMMIT'); return r; } catch (e) { db.exec('ROLLBACK'); throw e; }
 }
 
-// ---------- sesiones (en memoria; expiran a las 12 h) ----------
-const sesiones = new Map();
+// ---------- sesiones (persistentes en SQLite; expiran a las 12 h) ----------
 const SESION_MS = 12 * 3600 * 1000;
 const intentos = new Map(); // ip -> [timestamps] para frenar adivinar PINs
+const feedbackIntentos = new Map(); // ip -> [timestamps] para frenar spam en feedback
+
+function clientIp(req) {
+  return (TRAS_PROXY && String(req.headers['x-forwarded-for'] || '').split(',')[0].trim()) || req.socket.remoteAddress || 'local';
+}
+function limpiarLimites() {
+  const ahoraMs = Date.now();
+  db.prepare('DELETE FROM sesiones WHERE exp < ?').run(ahoraMs);
+  for (const [k, xs] of intentos) {
+    const f = xs.filter(t => ahoraMs - t < 60_000);
+    if (f.length) intentos.set(k, f); else intentos.delete(k);
+  }
+  for (const [k, xs] of feedbackIntentos) {
+    const f = xs.filter(t => ahoraMs - t < 600_000);
+    if (f.length) feedbackIntentos.set(k, f); else feedbackIntentos.delete(k);
+  }
+}
+setInterval(limpiarLimites, 600_000).unref();
 
 function usuarioDe(req) {
   const m = /(?:^|;\s*)sid=([a-f0-9]{48})/.exec(req.headers.cookie || '');
-  const s = m && sesiones.get(m[1]);
-  if (!s || s.exp < Date.now()) return null;
-  s.exp = Date.now() + SESION_MS;
-  return db.prepare('SELECT id, usuario, nombre, rol FROM usuarios WHERE id = ? AND activo = 1').get(s.uid) || null;
+  if (!m) return null;
+  const now = Date.now();
+  const row = db.prepare(`SELECT u.id, u.usuario, u.nombre, u.rol, s.exp
+                          FROM sesiones s JOIN usuarios u ON u.id = s.usuario_id
+                          WHERE s.token = ? AND u.activo = 1`).get(m[1]);
+  if (!row || row.exp < now) {
+    if (row) db.prepare('DELETE FROM sesiones WHERE token = ?').run(m[1]);
+    return null;
+  }
+  db.prepare('UPDATE sesiones SET exp = ? WHERE token = ?').run(now + SESION_MS, m[1]);
+  return { id: row.id, usuario: row.usuario, nombre: row.nombre, rol: row.rol };
 }
 const requiere = (u, rol) => {
   if (!u) fail(401, 'Inicia sesión');
@@ -101,7 +130,11 @@ function registrarVenta(u, body) {
     const costo = rec.reduce((a, r) => a + r.cantidad * r.costo, 0);
     return { p, variante, cantidad, precio, rec, costo };
   });
-  const total = lineas.reduce((a, l) => a + l.precio * l.cantidad, 0);
+  const subtotal = lineas.reduce((a, l) => a + l.precio * l.cantidad, 0);
+  const propina = body.propina == null || body.propina === ''
+    ? 0 : (num(body.propina, { min: 0, max: 10_000_000, int: true }) ?? fail(400, 'Propina inválida'));
+  const mesa = texto(body.mesa, 30) || 'Caja';
+  const total = subtotal + propina;
   let recibido = null;
   if (pago === 'efectivo' && body.recibido != null && body.recibido !== '') {
     recibido = num(body.recibido, { min: 0, max: 10_000_000, int: true }) ?? fail(400, 'Monto recibido inválido');
@@ -110,8 +143,8 @@ function registrarVenta(u, body) {
 
   return tx(() => {
     const fecha = ahora();
-    const ventaId = Number(db.prepare('INSERT INTO ventas (fecha, usuario_id, total, pago, recibido) VALUES (?,?,?,?,?)')
-      .run(fecha, u.id, total, pago, recibido).lastInsertRowid);
+    const ventaId = Number(db.prepare('INSERT INTO ventas (fecha, usuario_id, total, pago, recibido, mesa, propina) VALUES (?,?,?,?,?,?,?)')
+      .run(fecha, u.id, total, pago, recibido, mesa, propina).lastInsertRowid);
     const ii = db.prepare('INSERT INTO venta_items (venta_id, producto_id, nombre, variante, cantidad, precio, costo) VALUES (?,?,?,?,?,?,?)');
     const mv = db.prepare(`INSERT INTO movimientos (fecha, insumo_id, tipo, cantidad, costo, venta_id, usuario_id) VALUES (?,?,'venta',?,?,?,?)`);
     const st = db.prepare('UPDATE insumos SET stock = stock - ? WHERE id = ?');
@@ -123,11 +156,12 @@ function registrarVenta(u, body) {
         mv.run(fecha, r.insumo_id, -q, r.costo * q, ventaId, u.id);
       }
     }
-    if (body.comanda_id) {
-      db.prepare(`UPDATE comandas SET estado = 'cobrado' WHERE id = ?`).run(Number(body.comanda_id));
+    if (body.comanda_id != null && body.comanda_id !== '') {
+      const cid = num(body.comanda_id, { min: 1, int: true }) ?? fail(400, 'Comanda inválida');
+      db.prepare(`UPDATE comandas SET estado = 'cobrado' WHERE id = ?`).run(cid);
     }
     const alertas = db.prepare('SELECT nombre, stock, minimo, unidad FROM insumos WHERE activo = 1 AND stock <= minimo ORDER BY stock').all();
-    return { id: ventaId, fecha, total, cambio: recibido != null ? recibido - total : null, alertas };
+    return { id: ventaId, fecha, mesa, subtotal, propina, total, cambio: recibido != null ? recibido - total : null, alertas };
   });
 }
 
@@ -189,10 +223,10 @@ function ventasEn(q) {
 function reporte(q) {
   const [a, b, desde, hasta] = rango(q);
   const w = 'v.fecha BETWEEN ? AND ? AND v.anulada = 0';
-  const tot = db.prepare(`SELECT COUNT(*) ventas, COALESCE(SUM(total),0) total FROM ventas v WHERE ${w}`).get(a, b);
+  const tot = db.prepare(`SELECT COUNT(*) ventas, COALESCE(SUM(total),0) total, COALESCE(SUM(propina),0) propinas FROM ventas v WHERE ${w}`).get(a, b);
   const costo = db.prepare(`SELECT COALESCE(SUM(i.costo * i.cantidad),0) c FROM venta_items i JOIN ventas v ON v.id = i.venta_id WHERE ${w}`).get(a, b).c;
   return {
-    desde, hasta, ...tot, costo: Math.round(costo), margen: tot.total - Math.round(costo),
+    desde, hasta, ...tot, costo: Math.round(costo), margen: (tot.total - tot.propinas) - Math.round(costo),
     anuladas: db.prepare('SELECT COUNT(*) n FROM ventas v WHERE v.fecha BETWEEN ? AND ? AND v.anulada = 1').get(a, b).n,
     porPago: db.prepare(`SELECT pago, COUNT(*) ventas, SUM(total) total FROM ventas v WHERE ${w} GROUP BY pago ORDER BY total DESC`).all(a, b),
     porProducto: db.prepare(`SELECT i.nombre, SUM(i.cantidad) cantidad, SUM(i.cantidad * i.precio) total, ROUND(SUM(i.cantidad * i.costo)) costo
@@ -225,7 +259,8 @@ function carta() {
     if (!sec) secciones.push(sec = { id: slug(c.seccion), titulo: c.seccion, bloques: [] });
     sec.bloques.push({ tipo: c.tipo, id: slug(c.id), subtitulo: c.tipo === 'lista' ? c.nombre : null, items });
   }
-  return { secciones };
+  const whatsapp = String(process.env.WHATSAPP_PEDIDOS || '').replace(/\D/g, '');
+  return { secciones, ...(whatsapp ? { whatsapp } : {}) };
 }
 
 function guardarProducto(body, actual) {
@@ -254,33 +289,38 @@ function listarComandas() {
   return cs.map(c => ({ ...c, items: getItems.all(c.id) }));
 }
 
+function guardarItemsComanda(cid, items) {
+  let total = 0;
+  const insItem = db.prepare(
+    `INSERT INTO comanda_items (comanda_id, producto_id, nombre, variante, cantidad, precio, notas) VALUES (?,?,?,?,?,?,?)`
+  );
+  for (const it of items) {
+    const pid = String(it.id || it.producto_id || '');
+    const pr = db.prepare('SELECT nombre, precio, precio_combo FROM productos WHERE id = ? AND activo = 1').get(pid) || fail(400, 'Producto no disponible');
+    const variante = it.variante === 'combo' ? 'combo' : 'base';
+    if (variante === 'combo' && !pr.precio_combo) fail(400, `${pr.nombre} no tiene combo`);
+    const nombre = pr.nombre + (variante === 'combo' ? ' (combo)' : '');
+    const precio = variante === 'combo' ? pr.precio_combo : pr.precio;
+    const cant = num(it.cantidad, { min: 1, max: 99, int: true }) ?? fail(400, 'Cantidad inválida');
+    total += precio * cant;
+    insItem.run(cid, pid, nombre, variante, cant, precio, texto(it.notas, 150));
+  }
+  return total;
+}
+
 function crearComanda(body) {
   const mesa = texto(body?.mesa, 20) || 'Mesa 1';
   const cliente = texto(body?.cliente, 60) || '';
   const notas = texto(body?.notas, 300) || '';
   const items = Array.isArray(body?.items) ? body.items : [];
-  if (!items.length) fail(400, 'La comanda debe incluir al menos un producto');
+  if (!items.length || items.length > 60) fail(400, 'La comanda debe incluir al menos un producto');
 
   return tx(() => {
     const fecha = ahora();
-    let total = 0;
     const cid = Number(db.prepare(
       `INSERT INTO comandas (mesa, cliente, fecha, estado, total, notas) VALUES (?,?,?, 'pendiente', 0, ?)`
     ).run(mesa, cliente, fecha, notas).lastInsertRowid);
-
-    const insItem = db.prepare(
-      `INSERT INTO comanda_items (comanda_id, producto_id, nombre, variante, cantidad, precio, notas) VALUES (?,?,?,?,?,?,?)`
-    );
-    for (const it of items) {
-      const pid = String(it.id || it.producto_id || '');
-      const pr = db.prepare('SELECT nombre, precio, precio_combo FROM productos WHERE id = ?').get(pid);
-      const nombre = pr ? pr.nombre : texto(it.nombre, 60);
-      const variante = it.variante === 'combo' ? 'combo' : 'base';
-      const precio = pr ? (variante === 'combo' ? (pr.precio_combo || pr.precio) : pr.precio) : (Number(it.precio) || 0);
-      const cant = num(it.cantidad, { min: 1, max: 99, int: true }) || 1;
-      total += precio * cant;
-      insItem.run(cid, pid, nombre, variante, cant, precio, texto(it.notas, 150));
-    }
+    const total = guardarItemsComanda(cid, items);
     db.prepare('UPDATE comandas SET total = ? WHERE id = ?').run(total, cid);
     const getItems = db.prepare(`SELECT * FROM comanda_items WHERE comanda_id = ?`);
     return { id: cid, mesa, cliente, fecha, estado: 'pendiente', total, items: getItems.all(cid), notas };
@@ -291,9 +331,19 @@ function actualizarComanda(id, body) {
   const c = db.prepare('SELECT * FROM comandas WHERE id = ?').get(id) || fail(404, 'Comanda no encontrada');
   const estado = ['pendiente', 'preparando', 'listo', 'entregado', 'cobrado', 'archivado'].includes(body?.estado)
     ? body.estado : c.estado;
-  db.prepare('UPDATE comandas SET estado = ? WHERE id = ?').run(estado, id);
-  const getItems = db.prepare(`SELECT * FROM comanda_items WHERE comanda_id = ?`);
-  return { ...db.prepare('SELECT * FROM comandas WHERE id = ?').get(id), items: getItems.all(id) };
+  const mesa = body?.mesa != null ? (texto(body.mesa, 20) || c.mesa) : c.mesa;
+  const notas = body?.notas !== undefined ? texto(body.notas, 300) : c.notas;
+  return tx(() => {
+    let total = c.total;
+    if (Array.isArray(body?.items)) {
+      if (!body.items.length || body.items.length > 60) fail(400, 'La comanda debe incluir al menos un producto');
+      db.prepare('DELETE FROM comanda_items WHERE comanda_id = ?').run(id);
+      total = guardarItemsComanda(id, body.items);
+    }
+    db.prepare('UPDATE comandas SET estado = ?, mesa = ?, notas = ?, total = ? WHERE id = ?').run(estado, mesa, notas, total, id);
+    const getItems = db.prepare(`SELECT * FROM comanda_items WHERE comanda_id = ?`);
+    return { ...db.prepare('SELECT * FROM comandas WHERE id = ?').get(id), items: getItems.all(id) };
+  });
 }
 
 // ---------- rutas ----------
@@ -301,10 +351,11 @@ const rutas = [];
 const ruta = (m, re, fn) => rutas.push({ m, re: new RegExp('^' + re + '$'), fn });
 
 ruta('GET', '/api/carta', () => carta());
-ruta('GET', '/api/comandas', () => listarComandas());
-ruta('POST', '/api/comandas', ({ body }) => crearComanda(body));
-ruta('PUT', '/api/comandas/(\\d+)', ({ p, body }) => actualizarComanda(Number(p[1]), body));
-ruta('DELETE', '/api/comandas/(\\d+)', ({ p }) => {
+ruta('GET', '/api/comandas', ({ u }) => (requiere(u), listarComandas()));
+ruta('POST', '/api/comandas', ({ u, body }) => (requiere(u), crearComanda(body)));
+ruta('PUT', '/api/comandas/(\\d+)', ({ u, p, body }) => (requiere(u), actualizarComanda(Number(p[1]), body)));
+ruta('DELETE', '/api/comandas/(\\d+)', ({ u, p }) => {
+  requiere(u);
   db.prepare(`UPDATE comandas SET estado = 'archivado' WHERE id = ?`).run(Number(p[1]));
   return { ok: true };
 });
@@ -312,7 +363,11 @@ ruta('GET', '/api/feedback', ({ u }) => {
   requiere(u);
   return db.prepare('SELECT * FROM feedback ORDER BY id DESC LIMIT 100').all();
 });
-ruta('POST', '/api/feedback', ({ body }) => {
+ruta('POST', '/api/feedback', ({ body, req }) => {
+  const ip = clientIp(req), t = Date.now();
+  const lista = (feedbackIntentos.get(ip) || []).filter(x => t - x < 600_000);
+  if (lista.length >= 5) fail(429, 'Demasiadas opiniones enviadas. Intenta más tarde.');
+  lista.push(t); feedbackIntentos.set(ip, lista);
   const estrellas = num(body?.estrellas, { min: 1, max: 5, int: true }) || 5;
   const comentario = texto(body?.comentario, 500) || '';
   const mesa = texto(body?.mesa, 30) || 'Mesa';
@@ -325,7 +380,7 @@ ruta('POST', '/api/feedback', ({ body }) => {
 ruta('GET', '/api/usuarios-login', () => db.prepare('SELECT usuario, nombre FROM usuarios WHERE activo = 1 ORDER BY rol, nombre').all());
 ruta('GET', '/api/sesion', ({ u }) => (requiere(u), u));
 ruta('POST', '/api/login', ({ body, req, res }) => {
-  const ip = (TRAS_PROXY && String(req.headers['x-forwarded-for'] || '').split(',')[0].trim()) || req.socket.remoteAddress, t = Date.now();
+  const ip = clientIp(req), t = Date.now();
   const lista = (intentos.get(ip) || []).filter(x => t - x < 60_000);
   if (lista.length >= 6) fail(429, 'Demasiados intentos. Espera un minuto.');
   const row = db.prepare('SELECT * FROM usuarios WHERE usuario = ? AND activo = 1').get(String(body?.usuario || ''));
@@ -335,15 +390,16 @@ ruta('POST', '/api/login', ({ body, req, res }) => {
   }
   intentos.delete(ip);
   const sid = randomBytes(24).toString('hex');
-  sesiones.set(sid, { uid: row.id, exp: t + SESION_MS });
+  db.prepare('INSERT INTO sesiones (token, usuario_id, exp) VALUES (?,?,?)').run(sid, row.id, t + SESION_MS);
   const segura = TRAS_PROXY && req.headers['x-forwarded-proto'] === 'https' ? '; Secure' : '';
   res.setHeader('Set-Cookie', `sid=${sid}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${SESION_MS / 1000}${segura}`);
   return { id: row.id, usuario: row.usuario, nombre: row.nombre, rol: row.rol };
 });
 ruta('POST', '/api/logout', ({ req, res }) => {
   const m = /(?:^|;\s*)sid=([a-f0-9]{48})/.exec(req.headers.cookie || '');
-  if (m) sesiones.delete(m[1]);
-  res.setHeader('Set-Cookie', 'sid=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0');
+  if (m) db.prepare('DELETE FROM sesiones WHERE token = ?').run(m[1]);
+  const segura = TRAS_PROXY && req.headers['x-forwarded-proto'] === 'https' ? '; Secure' : '';
+  res.setHeader('Set-Cookie', `sid=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${segura}`);
   return { ok: true };
 });
 ruta('GET', '/api/datos', ({ u }) => (requiere(u), datos()));
@@ -402,7 +458,7 @@ ruta('POST', '/api/categorias', ({ u, body }) => {
   const nombre = texto(body?.nombre, 30) || fail(400, 'Falta el nombre');
   const seccion = texto(body?.seccion, 30).toLowerCase() || fail(400, 'Falta la sección');
   const tipo = body?.tipo === 'destacado' ? 'destacado' : 'lista';
-  const id = nombre.toLowerCase();
+  const id = slug(nombre) || fail(400, 'Nombre inválido');
   if (db.prepare('SELECT 1 FROM categorias WHERE id = ?').get(id)) fail(400, 'Ya existe esa categoría');
   const orden = db.prepare('SELECT COALESCE(MAX(orden), 0) + 1 o FROM categorias').get().o;
   db.prepare('INSERT INTO categorias (id, nombre, seccion, tipo, orden) VALUES (?,?,?,?,?)').run(id, nombre, seccion, tipo, orden);

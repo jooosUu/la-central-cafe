@@ -99,7 +99,7 @@ await t('carta trae secciones del menú con combo y modelo 3D', async () => {
 await t('dueño crea categoría y producto; aparece en la carta; cajero no puede', async () => {
   assert.equal((await caja('POST', '/productos', { nombre: 'X', categoria: 'choripan', precio: 1 })).status, 403);
   assert.equal((await admin('POST', '/categorias', { nombre: 'Cafés', seccion: 'cafés', tipo: 'lista' })).status, 200);
-  const r = await admin('POST', '/productos', { nombre: 'Tinto <b>grande</b>', categoria: 'cafés', precio: 3000, descripcion: 'de la casa' });
+  const r = await admin('POST', '/productos', { nombre: 'Tinto <b>grande</b>', categoria: 'cafes', precio: 3000, descripcion: 'de la casa' });
   assert.equal(r.status, 200, JSON.stringify(r.data));
   assert.equal(r.data.id, 'tinto-b-grande-b');
   const it = itemsCarta((await anon('GET', '/carta')).data).find(p => p.id === r.data.id);
@@ -121,6 +121,44 @@ await t('copia de seguridad descargable solo por el dueño', async () => {
   const r = await fetch(BASE + '/api/respaldo', { headers: { cookie: admin.cookie() } });
   const buf = Buffer.from(await r.arrayBuffer());
   assert.equal(r.status, 200); assert.equal(buf.subarray(0, 15).toString(), 'SQLite format 3');
+});
+await t('comandas requieren sesión; crear, editar ítems y cobrar con propina y mesa', async () => {
+  assert.equal((await anon('GET', '/comandas')).status, 401);
+  assert.equal((await anon('POST', '/comandas', { mesa: 'Mesa 2', items: [{ producto_id: 'choripan', cantidad: 1 }] })).status, 401);
+  assert.equal((await anon('PUT', '/comandas/1', { estado: 'cobrado' })).status, 401);
+  assert.equal((await anon('DELETE', '/comandas/1')).status, 401);
+
+  const c1 = await caja('POST', '/comandas', { mesa: 'Mesa 3', items: [{ producto_id: 'choripan', cantidad: 1 }] });
+  assert.equal(c1.status, 200);
+  assert.equal(c1.data.total, 13000);
+
+  const c2 = await caja('PUT', `/comandas/${c1.data.id}`, {
+    mesa: 'Mesa 4',
+    items: [{ producto_id: 'choripan', variante: 'combo', cantidad: 1 }, { producto_id: 'aguila', cantidad: 1 }],
+  });
+  assert.equal(c2.status, 200);
+  assert.equal(c2.data.mesa, 'Mesa 4');
+  assert.equal(c2.data.total, 17000 + 3500);
+  assert.equal(c2.data.items.length, 2);
+
+  assert.equal((await caja('POST', '/ventas', {
+    items: [{ producto_id: 'choripan', variante: 'combo', cantidad: 1 }, { producto_id: 'aguila', cantidad: 1 }],
+    pago: 'efectivo', recibido: 21000, propina: 2000, mesa: 'Mesa 4', comanda_id: c1.data.id,
+  })).status, 400);
+
+  const v = await caja('POST', '/ventas', {
+    items: [{ producto_id: 'choripan', variante: 'combo', cantidad: 1 }, { producto_id: 'aguila', cantidad: 1 }],
+    pago: 'efectivo', recibido: 25000, propina: 2000, mesa: 'Mesa 4', comanda_id: c1.data.id,
+  });
+  assert.equal(v.status, 200);
+  assert.equal(v.data.total, 22500);
+  assert.equal(v.data.propina, 2000);
+  assert.equal(v.data.cambio, 2500);
+  const repTip = (await admin('GET', '/reportes')).data;
+  assert.ok(repTip.propinas >= 2000);
+  const activas = (await caja('GET', '/comandas')).data;
+  assert.equal(activas.find(x => x.id === c1.data.id).estado, 'cobrado');
+  await admin('POST', `/ventas/${v.data.id}/anular`);
 });
 await t('petición desde otro origen es bloqueada', async () => {
   const r = await fetch(BASE + '/api/logout', { method: 'POST', headers: { origin: 'https://malicioso.example' } });

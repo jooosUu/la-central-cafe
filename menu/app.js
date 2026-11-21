@@ -9,11 +9,17 @@ const poster = m => `img/posters/${m}.webp`;
 const model = m => `models/${m}.glb`;
 const svg = f => fetch(f).then(r => r.text());
 
+// Palabra de la portada de noche ya convertida a trazos (Utendo ExtraBold), para que el filtro SVG no dependa de la fuente.
+const NOCHE_W = {"es": "M105.2 112.2Q105.2 108.3 103.8 104.7Q102.3 101.1 99.8 98.5Q97.4 95.8 94.1 94.2Q90.8 92.6 87.1 92.6Q83.4 92.6 80.2 94.2Q76.9 95.8 74.4 98.5Q71.9 101.1 70.5 104.7Q69.0 108.3 69.0 112.2Q69.0 116.2 70.5 119.8Q71.9 123.4 74.4 126.1Q76.9 128.8 80.2 130.4Q83.4 132.0 87.1 132.0Q90.8 132.0 94.1 130.4Q97.4 128.8 99.8 126.1Q102.3 123.4 103.8 119.8Q105.2 116.2 105.2 112.2ZM133.8 112.3Q133.8 121.3 130.7 129.1Q127.6 137.0 122.3 142.9Q117.0 148.8 109.9 152.2Q102.8 155.5 94.6 155.5Q87.4 155.5 81.2 152.8Q75.0 150.1 69.8 145.4V184.2H40.7V72.2H69.8V79.2Q75.0 74.6 81.2 71.8Q87.4 69.1 94.6 69.1Q102.8 69.1 109.9 72.5Q117.0 75.8 122.3 81.8Q127.6 87.7 130.7 95.5Q133.8 103.4 133.8 112.3ZM165.7 112.2Q165.7 116.2 167.1 119.8Q168.6 123.4 171.0 126.1Q173.5 128.8 176.8 130.4Q180.1 132.0 183.8 132.0Q187.4 132.0 190.7 130.4Q194.0 128.8 196.5 126.1Q199.0 123.4 200.4 119.8Q201.8 116.2 201.8 112.2Q201.8 108.3 200.4 104.7Q199.0 101.1 196.5 98.5Q194.0 95.8 190.7 94.2Q187.4 92.6 183.8 92.6Q180.1 92.6 176.8 94.2Q173.5 95.8 171.0 98.5Q168.6 101.1 167.1 104.7Q165.7 108.3 165.7 112.2ZM137.0 112.3Q137.0 103.4 140.2 95.5Q143.3 87.7 148.6 81.8Q153.8 75.8 161.0 72.5Q168.1 69.1 176.2 69.1Q183.4 69.1 189.7 71.8Q195.9 74.6 201.0 79.2V72.0H230.2V152.0H201.0V145.4Q195.9 150.1 189.7 152.8Q183.4 155.5 176.2 155.5Q168.1 155.5 161.0 152.2Q153.8 148.8 148.6 142.9Q143.3 137.0 140.2 129.1Q137.0 121.3 137.0 112.3ZM290.8 94.7Q279.8 94.4 274.5 99.8Q269.2 105.3 269.2 114.7V152.0H240.1V72.0H269.2V81.0Q273.2 74.7 279.1 72.1Q285.0 69.4 290.8 69.8ZM346.8 94.7Q335.8 94.4 330.5 99.8Q325.2 105.3 325.2 114.7V152.0H296.1V72.0H325.2V81.0Q329.2 74.7 335.1 72.1Q341.0 69.4 346.8 69.8ZM349.8 48.6Q349.8 45.4 351.2 42.7Q352.6 40.0 354.9 37.8Q357.2 35.7 360.2 34.5Q363.3 33.3 366.8 33.3Q370.3 33.3 373.4 34.5Q376.4 35.7 378.7 37.8Q381.0 40.0 382.4 42.7Q383.8 45.4 383.8 48.6Q383.8 51.7 382.4 54.5Q381.0 57.3 378.7 59.4Q376.4 61.6 373.4 62.8Q370.3 64.0 366.8 64.0Q363.3 64.0 360.2 62.8Q357.2 61.6 354.9 59.4Q352.6 57.3 351.2 54.5Q349.8 51.7 349.8 48.6ZM352.2 72.0H381.4V152.0H352.2ZM420.6 152.0H391.4V40.0H420.6ZM459.6 152.0H430.5V40.0H459.6ZM494.8 112.2Q494.8 116.2 496.2 119.8Q497.7 123.4 500.2 126.1Q502.6 128.8 505.9 130.4Q509.2 132.0 512.9 132.0Q516.6 132.0 519.8 130.4Q523.1 128.8 525.6 126.1Q528.1 123.4 529.5 119.8Q531.0 116.2 531.0 112.2Q531.0 108.3 529.5 104.7Q528.1 101.1 525.6 98.5Q523.1 95.8 519.8 94.2Q516.6 92.6 512.9 92.6Q509.2 92.6 505.9 94.2Q502.6 95.8 500.2 98.5Q497.7 101.1 496.2 104.7Q494.8 108.3 494.8 112.2ZM466.2 112.3Q466.2 103.4 469.3 95.5Q472.4 87.7 477.7 81.8Q483.0 75.8 490.1 72.5Q497.2 69.1 505.4 69.1Q512.6 69.1 518.8 71.8Q525.0 74.6 530.2 79.2V72.0H559.3V152.0H530.2V145.4Q525.0 150.1 518.8 152.8Q512.6 155.5 505.4 155.5Q497.2 155.5 490.1 152.2Q483.0 148.8 477.7 142.9Q472.4 137.0 469.3 129.1Q466.2 121.3 466.2 112.3Z", "en": "M193.7 112.2Q193.7 116.2 195.1 119.8Q196.6 123.4 199.0 126.1Q201.5 128.8 204.8 130.4Q208.1 132.0 211.8 132.0Q215.4 132.0 218.7 130.4Q222.0 128.8 224.5 126.1Q227.0 123.4 228.4 119.8Q229.8 116.2 229.8 112.2Q229.8 108.3 228.4 104.7Q227.0 101.1 224.5 98.5Q222.0 95.8 218.7 94.2Q215.4 92.6 211.8 92.6Q208.1 92.6 204.8 94.2Q201.5 95.8 199.0 98.5Q196.6 101.1 195.1 104.7Q193.7 108.3 193.7 112.2ZM165.0 112.3Q165.0 103.4 168.2 95.5Q171.3 87.7 176.6 81.8Q181.8 75.8 189.0 72.5Q196.1 69.1 204.2 69.1Q211.4 69.1 217.7 71.8Q223.9 74.6 229.0 79.2V72.2H258.2V149.4Q258.2 161.3 254.2 169.9Q250.2 178.6 243.5 184.2Q236.9 189.8 228.4 192.6Q219.9 195.4 210.8 195.4Q196.2 195.4 185.2 189.7Q174.2 184.0 166.6 175.5L185.4 160.2Q190.0 164.5 195.8 167.8Q201.5 171.2 209.2 171.2Q213.0 171.2 216.6 170.0Q220.1 168.8 222.9 166.2Q225.7 163.7 227.4 159.8Q229.0 156.0 229.0 150.9V145.4Q223.9 150.1 217.7 152.8Q211.4 155.5 204.2 155.5Q196.1 155.5 189.0 152.2Q181.8 148.8 176.6 142.9Q171.3 137.0 168.2 129.1Q165.0 121.3 165.0 112.3ZM318.8 94.7Q307.8 94.4 302.5 99.8Q297.2 105.3 297.2 114.7V152.0H268.1V72.0H297.2V81.0Q301.2 74.7 307.1 72.1Q313.0 69.4 318.8 69.8ZM321.8 48.6Q321.8 45.4 323.2 42.7Q324.6 40.0 326.9 37.8Q329.2 35.7 332.2 34.5Q335.3 33.3 338.8 33.3Q342.3 33.3 345.4 34.5Q348.4 35.7 350.7 37.8Q353.0 40.0 354.4 42.7Q355.8 45.4 355.8 48.6Q355.8 51.7 354.4 54.5Q353.0 57.3 350.7 59.4Q348.4 61.6 345.4 62.8Q342.3 64.0 338.8 64.0Q335.3 64.0 332.2 62.8Q329.2 61.6 326.9 59.4Q324.6 57.3 323.2 54.5Q321.8 51.7 321.8 48.6ZM324.2 72.0H353.4V152.0H324.2ZM392.6 152.0H363.4V40.0H392.6ZM431.6 152.0H402.5V40.0H431.6Z"};
+
 // =================================================================== I18N (ES / EN)
 const I18N = {
   es: {
     langCode: 'EN',
     introT: 'menú',
+    nocheK: 'la central · tunja · desde las 3 pm',
+    nocheW: 'parrilla',
+    nocheT: 'café de día, fuego de noche',
     hint: 'Toca <b>3D</b> para ver el plato y ponerlo sobre tu mesa.',
     searchPlaceholder: 'buscar café, choripán, bebidas…',
     cajaBadge: '🧾 caja / comanda',
@@ -31,16 +37,15 @@ const I18N = {
     notas: 'instrucciones especiales:',
     totalPagar: 'total a pagar:',
     enviarCocina: '👨‍🍳 Enviar a Cocina',
-    pedirWsp: '💬 Pedir por WhatsApp',
+    pedirWsp: 'Pedir por WhatsApp',
     vaciarPedido: 'vaciar pedido',
-    preciosPie: 'Precios en pesos colombianos',
-    calidadPie: 'La Central Café · Calidad de origen',
+    calidadPie: 'La Central · Calidad de origen',
     pedidoVacio: 'Aún no has agregado productos a tu pedido.',
     pedidoEnviadoOk: '✅ ¡Pedido enviado a la cocina! Tu orden fue registrada. En breve te lo servimos a la mesa.',
     mesaPrefijo: 'mesa ',
     reviewPill: 'califícanos',
     mapsTitle: 'visítanos en Tunja',
-    mapsDesc: 'La Central Café · Calidad de origen, filtrados y buena vibra en Tunja, Boyacá.',
+    mapsDesc: 'La Central · Calidad de origen, filtrados y buena vibra en Tunja, Boyacá.',
     igDesc: 'Fotos de nuestros cafés de origen, nuevos granos, métodos de extracción y eventos especiales.',
     fbTitle: '¡pedido en cocina!',
     fbSubtitle: 'Tu orden está siendo preparada. En breve te la llevamos a tu mesa.',
@@ -59,6 +64,9 @@ const I18N = {
   en: {
     langCode: 'ES',
     introT: 'menu',
+    nocheK: 'la central · tunja · from 3 pm',
+    nocheW: 'grill',
+    nocheT: 'coffee by day, fire by night',
     hint: 'Tap <b>3D</b> to view the dish in Augmented Reality on your table.',
     searchPlaceholder: 'search coffee, food, drinks…',
     cajaBadge: '🧾 pos / orders',
@@ -76,16 +84,15 @@ const I18N = {
     notas: 'special instructions:',
     totalPagar: 'total to pay:',
     enviarCocina: '👨‍🍳 Send to Kitchen',
-    pedirWsp: '💬 Order via WhatsApp',
+    pedirWsp: 'Order via WhatsApp',
     vaciarPedido: 'clear order',
-    preciosPie: 'Prices in Colombian Pesos (COP)',
-    calidadPie: 'La Central Café · Origin Coffee',
+    calidadPie: 'La Central · Origin Coffee',
     pedidoVacio: 'Your order is currently empty.',
     pedidoEnviadoOk: '✅ Order sent to kitchen! Your ticket is registered. We will bring it to your table shortly.',
     mesaPrefijo: 'table ',
     reviewPill: 'review us',
     mapsTitle: 'visit us in Tunja',
-    mapsDesc: 'La Central Café · Specialty origin coffee, pour-overs and good vibes in Tunja, Boyacá.',
+    mapsDesc: 'La Central · Specialty origin coffee, pour-overs and good vibes in Tunja, Boyacá.',
     igDesc: 'Photos of our origin beans, brewing methods, specialty coffee and community events.',
     fbTitle: 'order in kitchen!',
     fbSubtitle: 'Your order is being prepared. We will bring it to your table shortly.',
@@ -108,9 +115,12 @@ function aplicarIdioma() {
   const t = I18N[lang];
   $('#lang-label').textContent = t.langCode;
   $('#txt-intro-t').textContent = t.introT;
+  const nk = $('#txt-noche-k'), nw = $('#txt-noche-w'), nt = $('#txt-noche-t');
+  if (nk) nk.textContent = t.nocheK;
+  if (nw) nw.setAttribute('d', NOCHE_W[lang]);
+  if (nt) nt.textContent = t.nocheT;
   $('#txt-hint').innerHTML = t.hint;
   $('#menu-search').placeholder = t.searchPlaceholder;
-  $('#txt-pie-precios').textContent = t.preciosPie;
   $('#txt-pie-test').textContent = t.calidadPie;
   $('#cart-title').textContent = t.tuPedido;
   $('#lbl-mesa').textContent = t.mesaLugar;
@@ -154,6 +164,8 @@ function aplicarIdioma() {
   if (fbsb) fbsb.textContent = t.fbSendBtn;
   const fbb = $('#btn-fb-close');
   if (fbb) fbb.textContent = t.fbBackBtn;
+  if (mesaParam && /^\d{1,3}$/.test(mesaParam)) $('#mesa').textContent = t.mesaPrefijo + mesaParam;
+  if (typeof renderCarta === 'function' && $('#carta')?.children.length) renderCarta();
 }
 
 $('#btn-lang').onclick = () => {
@@ -166,6 +178,7 @@ $('#btn-lang').onclick = () => {
 // =================================================================== DATOS DE CARTA
 let MENU = MENU_FIJO.map(sec => ({ ...sec, bloques: sec.bloques.map(b => ({ ...b,
   items: b.items.map(it => ({ ...it, comboIncluye: it.combo ? COMBO : [] })) })) }));
+let whatsappDestino = '';
 
 try {
   const ctrl = new AbortController(); setTimeout(() => ctrl.abort(), 3000);
@@ -173,6 +186,7 @@ try {
   if (r.ok) {
     const d = await r.json();
     if (d.secciones?.length) MENU = d.secciones;
+    if (d.whatsapp) whatsappDestino = String(d.whatsapp).replace(/\D/g, '');
   } else {
     aplicarDemoStore();
   }
@@ -202,10 +216,11 @@ function aplicarDemoStore() {
 }
 
 // ---------- marca SVGs ----------
-svg('img/logo-horizontal.svg').then(s => { $('#logo').innerHTML = s; $('#foot-logo').innerHTML = s; });
+svg('img/llama.svg?v=3').then(s => { const nl = $('#noche-llama'); if (nl) nl.innerHTML = s; });
+svg('img/logo-horizontal.svg?v=3').then(s => { $('#logo').innerHTML = s; $('#foot-logo').innerHTML = s; });
 Promise.all(['corazon', 'fuego', 'rapido', 'cafe'].map(n => svg(`img/icono-${n}.svg`))).then(list => {
   const html = list.join('');
-  $('#iconos').innerHTML = html; $('#iconos-foot').innerHTML = html;
+  ['#iconos', '#iconos-foot'].forEach(s => { const el = $(s); if (el) el.innerHTML = html; });
 });
 
 // Mesa en query param: ?mesa=5
@@ -215,8 +230,13 @@ if (mesaParam && /^\d{1,3}$/.test(mesaParam)) {
   mesaActual = 'Mesa ' + mesaParam;
   $('#mesa').textContent = I18N[lang].mesaPrefijo + mesaParam;
   $('#mesa').hidden = false;
-  const optFound = [...$('#cart-mesa-select').options].find(o => o.value === mesaActual);
-  if (optFound) $('#cart-mesa-select').value = mesaActual;
+  const sel = $('#cart-mesa-select');
+  if (![...sel.options].some(o => o.value === mesaActual)) {
+    const opt = document.createElement('option');
+    opt.value = mesaActual; opt.textContent = mesaActual;
+    sel.prepend(opt);
+  }
+  sel.value = mesaActual;
   $('#cart-mesa-pill').textContent = mesaActual;
 }
 
@@ -299,7 +319,7 @@ function actualizarUICarrito() {
     <div class="cart-item-row">
       <div class="cart-item-info">
         <span class="cart-item-title">${esc(it.nombre)}</span>
-        <span class="cart-item-variant">${esc(it.variante === 'combo' ? 'Combo completo' : 'Sencillo')} · ${fmt(it.precio)}</span>
+        <span class="cart-item-variant">${esc(it.variante === 'combo' ? I18N[lang].combo : I18N[lang].sencillo)} · ${fmt(it.precio)}</span>
       </div>
       <div class="cart-item-qty">
         <button type="button" class="cart-qty-btn" data-cminus="${idx}">-</button>
@@ -328,7 +348,7 @@ $('#btn-enviar-wsp').onclick = () => {
   const notas = $('#cart-notas-input').value.trim();
   const total = cart.reduce((acc, it) => acc + it.precio * it.cantidad, 0);
 
-  let msg = `*☕ PEDIDO DESDE EL MENÚ DIGITAL - LA CENTRAL CAFÉ*\n`;
+  let msg = `*☕ PEDIDO DESDE EL MENÚ DIGITAL - LA CENTRAL · TUNJA*\n`;
   msg += `*${mesaSel}*${cliente ? ` · ${cliente}` : ''}\n`;
   msg += `--------------------------------------\n`;
   for (const it of cart) {
@@ -339,7 +359,10 @@ $('#btn-enviar-wsp').onclick = () => {
   if (notas) msg += `*Notas:* ${notas}\n`;
   msg += `\n¡Hola! Les envío mi pedido desde el menú digital para confirmarlo. ¡Muchas gracias!`;
 
-  window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, '_blank');
+  const wspBase = whatsappDestino
+    ? `https://api.whatsapp.com/send?phone=${whatsappDestino}&text=${encodeURIComponent(msg)}`
+    : `https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`;
+  window.open(wspBase, '_blank', 'noopener');
 
   vaciarCarrito();
   $('#cart-drawer').close();
@@ -356,7 +379,7 @@ function abrirModalFeedback(mesa = 'Mesa 1', cliente = '', vieneDePedido = false
   if (!modal) return;
 
   const topPill = $('#fb-top-pill');
-  if (topPill) topPill.textContent = vieneDePedido ? `☕ ${mesa} · La Central Café` : '☕ La Central Café · Tunja';
+  if (topPill) topPill.textContent = vieneDePedido ? `☕ ${mesa} · La Central` : '☕ La Central · Tunja';
 
   const title = $('#fb-title');
   if (title) title.textContent = vieneDePedido ? I18N[lang].fbTitle : (lang === 'en' ? 'how was your visit?' : '¿cómo estuvo tu visita?');
@@ -435,8 +458,8 @@ $$('#fb-stars .fb-star').forEach(b => {
   b.onclick = () => seleccionarEstrellas(Number(b.dataset.val));
 });
 
-$('#btn-open-review')?.addEventListener('click', () => abrirModalFeedback($('#mesa')?.textContent || 'Mesa 1', '', false));
-$('#btn-footer-review')?.addEventListener('click', () => abrirModalFeedback($('#mesa')?.textContent || 'Mesa 1', '', false));
+$('#btn-open-review')?.addEventListener('click', () => abrirModalFeedback(mesaActual, '', false));
+$('#btn-footer-review')?.addEventListener('click', () => abrirModalFeedback(mesaActual, '', false));
 
 $('#btn-enviar-opinion')?.addEventListener('click', async () => {
   const comm = $('#fb-comentario')?.value?.trim() || '';
@@ -450,6 +473,7 @@ $('#btn-enviar-opinion')?.addEventListener('click', async () => {
 // =================================================================== RENDERIZADO CARTA
 const tabs = $('#tabs'), carta = $('#carta');
 const byId = {};
+let targets = [];
 
 const btn3d = it => it.model
   ? `<button type="button" class="ring b3d" data-id="${esc(it.id)}" aria-label="Ver ${esc(it.nombre)} en 3D">3D</button>`
@@ -460,63 +484,69 @@ const fila = (it, extra = '') =>
 
 function tab(id, texto) { const a = el('a', 'tab'); a.textContent = texto; a.href = '#' + id; a.dataset.cat = id; tabs.append(a); }
 
-for (const sec of MENU) {
-  const s = el('section', 'cat'); s.id = sec.id;
-  const h2 = el('h2', 'cat-t'); h2.textContent = sec.titulo;
-  s.append(h2, el('hr', 'regla'));
-  if (sec.bloques[0]?.tipo === 'destacado') tab(sec.id, sec.titulo);
+function renderCarta() {
+  const t = I18N[lang];
+  tabs.innerHTML = '';
+  carta.innerHTML = '';
+  for (const sec of MENU) {
+    const s = el('section', 'cat'); s.id = sec.id;
+    const h2 = el('h2', 'cat-t'); h2.textContent = sec.titulo;
+    s.append(h2, el('hr', 'regla'));
+    if (sec.bloques[0]?.tipo === 'destacado') tab(sec.id, sec.titulo);
 
-  let dests = null, listas = null;
-  for (const b of sec.bloques) {
-    if (b.tipo === 'destacado') {
-      dests ??= s.appendChild(el('div', 'dests'));
-      for (const it of b.items) {
-        byId[it.id] = it;
-        const art = el('article', 'dest');
-        art.dataset.pid = it.id;
-        const foto = it.model
-          ? `<button type="button" class="foto" data-id="${esc(it.id)}" aria-label="Ver ${esc(it.nombre)} en 3D">
-              <img src="${poster(it.model)}" alt="" loading="lazy" decoding="async"><span class="ring">3D</span>`
-          : `<div class="foto foto-vacia"><span class="marca" data-svg="img/taza.svg"></span>`;
-        art.innerHTML = `
-          ${foto}${it.agotado ? '<span class="sello">agotado hoy</span>' : ''}${it.model ? '</button>' : '</div>'}
-          <div class="dest-body${it.agotado ? ' agotado' : ''}">
-            <h3 class="dest-nom">${esc(it.nombre)}</h3>
-            <div class="precios2${it.combo ? '' : ' uno'}">
-              <div><small>${it.combo ? 'sencillo' : 'precio'}</small><b>${it.agotado ? 'agotado' : fmt(it.precio)}</b></div>
-              ${it.combo ? `<div><small>combo</small><b>${it.agotado || it.comboAgotado ? 'agotado' : fmt(it.combo)}</b><span>${it.comboIncluye.map(esc).join('<br>')}</span></div>` : ''}
-            </div>
-            ${it.desc ? `<p class="desc">${esc(it.desc)}</p>` : ''}
-            ${!it.agotado ? `
-            <div class="dest-actions">
-              <button type="button" class="btn-pedir" data-add="${esc(it.id)}" data-var="sencillo">+ pedir</button>
-              ${it.combo && !it.comboAgotado ? `<button type="button" class="btn-pedir btn-pedir-combo" data-add="${esc(it.id)}" data-var="combo">+ combo</button>` : ''}
-            </div>` : ''}
-          </div>`;
-        dests.append(art);
+    let dests = null, listas = null;
+    for (const b of sec.bloques) {
+      if (b.tipo === 'destacado') {
+        dests ??= s.appendChild(el('div', 'dests'));
+        for (const it of b.items) {
+          byId[it.id] = it;
+          const art = el('article', 'dest');
+          art.dataset.pid = it.id;
+          const foto = it.model
+            ? `<button type="button" class="foto" data-id="${esc(it.id)}" aria-label="Ver ${esc(it.nombre)} en 3D">
+                <img src="${poster(it.model)}" alt="" loading="lazy" decoding="async"><span class="ring">3D</span>`
+            : `<div class="foto foto-vacia"><span class="marca" data-svg="img/taza.svg"></span>`;
+          art.innerHTML = `
+            ${foto}${it.agotado ? `<span class="sello">${esc(t.agotadoHoy)}</span>` : ''}${it.model ? '</button>' : '</div>'}
+            <div class="dest-body${it.agotado ? ' agotado' : ''}">
+              <h3 class="dest-nom">${esc(it.nombre)}</h3>
+              <div class="precios2${it.combo ? '' : ' uno'}">
+                <div><small>${esc(it.combo ? t.sencillo : t.precio)}</small><b>${esc(it.agotado ? t.agotado : fmt(it.precio))}</b></div>
+                ${it.combo ? `<div><small>${esc(t.combo)}</small><b>${esc(it.agotado || it.comboAgotado ? t.agotado : fmt(it.combo))}</b><span>${it.comboIncluye.map(esc).join('<br>')}</span></div>` : ''}
+              </div>
+              ${it.desc ? `<p class="desc">${esc(it.desc)}</p>` : ''}
+              ${!it.agotado ? `
+              <div class="dest-actions">
+                <button type="button" class="btn-pedir" data-add="${esc(it.id)}" data-var="sencillo">${esc(t.pedir)}</button>
+                ${it.combo && !it.comboAgotado ? `<button type="button" class="btn-pedir btn-pedir-combo" data-add="${esc(it.id)}" data-var="combo">${esc(t.pedirCombo)}</button>` : ''}
+              </div>` : ''}
+            </div>`;
+          dests.append(art);
+        }
+      } else {
+        const blk = el('div', 'lista'); if (b.id) blk.id = b.id;
+        if (b.subtitulo && b.subtitulo.toLowerCase() !== sec.titulo.toLowerCase()) { const h3 = el('h3', 'sub'); h3.textContent = b.subtitulo; blk.append(h3); }
+        if (b.id) tab(b.id, (b.subtitulo || sec.titulo).toLowerCase());
+        const ul = el('ul');
+        for (const it of b.items) {
+          byId[it.id] = it;
+          const li = el('li');
+          li.dataset.pid = it.id;
+          li.innerHTML = fila(it) + (it.agotado ? '' : `<button type="button" class="btn-add-item" data-add="${esc(it.id)}" data-var="sencillo" title="Agregar">${esc(t.pedir)}</button>`) + btn3d(it);
+          ul.append(li);
+        }
+        blk.append(ul);
+        listas ??= s.appendChild(el('div', 'listas'));
+        listas.append(blk);
       }
-    } else {
-      const blk = el('div', 'lista'); if (b.id) blk.id = b.id;
-      if (b.subtitulo && b.subtitulo.toLowerCase() !== sec.titulo.toLowerCase()) { const h3 = el('h3', 'sub'); h3.textContent = b.subtitulo; blk.append(h3); }
-      if (b.id) tab(b.id, (b.subtitulo || sec.titulo).toLowerCase());
-      const ul = el('ul');
-      for (const it of b.items) {
-        byId[it.id] = it;
-        const li = el('li');
-        li.dataset.pid = it.id;
-        li.innerHTML = fila(it) + (it.agotado ? '' : `<button type="button" class="btn-add-item" data-add="${esc(it.id)}" data-var="sencillo" title="Agregar">+ pedir</button>`) + btn3d(it);
-        ul.append(li);
-      }
-      blk.append(ul);
-      listas ??= s.appendChild(el('div', 'listas'));
-      listas.append(blk);
     }
+    carta.append(s);
   }
-  carta.append(s);
+  document.querySelectorAll('[data-svg]').forEach(async e => { e.innerHTML = await svg(e.dataset.svg); });
+  targets = [...tabs.querySelectorAll('.tab')].map(tb => document.getElementById(tb.dataset.cat)).filter(Boolean);
+  if ($('#menu-search')?.value) filtrarCarta($('#menu-search').value);
+  marcar();
 }
-
-// marca para platos sin modelo 3D
-document.querySelectorAll('[data-svg]').forEach(async e => { e.innerHTML = await svg(e.dataset.svg); });
 
 // =================================================================== BUSCADOR INSTANTÁNEO
 const searchInput = $('#menu-search');
@@ -547,7 +577,6 @@ searchClear.onclick = () => {
 };
 
 // =================================================================== PESTAÑAS Y SCROLL
-const targets = [...tabs.querySelectorAll('.tab')].map(t => document.getElementById(t.dataset.cat)).filter(Boolean);
 const marcar = () => {
   const y = innerHeight * 0.35;
   let cur = targets[0];
@@ -585,6 +614,8 @@ carta.addEventListener('click', e => {
 const visor = $('#visor'), mv = $('#mv');
 
 function abrir(it) {
+  $('#v-bar').style.width = '0%';
+  $('#v-bar').parentElement.classList.remove('done');
   mv.poster = poster(it.model);
   mv.src = model(it.model);
   mv.alt = `Modelo 3D de ${it.nombre}`;
@@ -596,10 +627,11 @@ function abrir(it) {
   
   const pWrap = $('#v-pedir-wrap');
   if (pWrap) {
+    const t = I18N[lang];
     pWrap.innerHTML = !it.agotado ? `
-      <button type="button" class="btn-pedir" id="v-add-sencillo">+ pedir ${esc(it.nombre)}</button>
-      ${it.combo && !it.comboAgotado ? `<button type="button" class="btn-pedir btn-pedir-combo" id="v-add-combo">+ combo</button>` : ''}
-    ` : '<span class="sello">agotado</span>';
+      <button type="button" class="btn-pedir" id="v-add-sencillo">${esc(t.pedir)} ${esc(it.nombre)}</button>
+      ${it.combo && !it.comboAgotado ? `<button type="button" class="btn-pedir btn-pedir-combo" id="v-add-combo">${esc(t.pedirCombo)}</button>` : ''}
+    ` : `<span class="sello">${esc(t.agotado)}</span>`;
     
     $('#v-add-sencillo')?.addEventListener('click', () => {
       agregarAlCarrito(it.id, 'sencillo');
@@ -632,9 +664,49 @@ mv.addEventListener('load', () => {
 });
 mv.addEventListener('ar-status', e => { if (e.detail.status === 'failed') $('#v-noar').hidden = false; });
 
-// Inicializar idioma y carrito
+function reconciliarCarrito() {
+  if (!cart.length) return;
+  const limpio = [];
+  for (const c of cart) {
+    const it = byId[c.id];
+    if (!it || it.agotado) continue;
+    if (c.variante === 'combo' && (!it.combo || it.comboAgotado)) continue;
+    const cant = Math.max(1, Math.min(99, parseInt(c.cantidad, 10) || 1));
+    limpio.push({
+      id: it.id,
+      nombre: it.nombre,
+      variante: c.variante === 'combo' ? 'combo' : 'sencillo',
+      precio: c.variante === 'combo' ? it.combo : it.precio,
+      cantidad: cant
+    });
+  }
+  if (JSON.stringify(limpio) !== JSON.stringify(cart)) {
+    cart = limpio;
+    localStorage.setItem('lc_cliente_cart', JSON.stringify(cart));
+  }
+}
+
+// Inicializar carta, idioma y carrito
+renderCarta();
+reconciliarCarrito();
 aplicarIdioma();
 actualizarUICarrito();
 
 // Service Worker
 if ('serviceWorker' in navigator && isSecureContext) navigator.serviceWorker.register('sw.js').catch(() => {});
+
+// ---------- modo parrilla: los títulos entran "enfocándose" (de desenfocado a nítido) ----------
+(() => {
+  if (!('IntersectionObserver' in window) || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const io = new IntersectionObserver(es => es.forEach(e => {
+    if (e.isIntersecting) { e.target.classList.add('enfocado'); io.unobserve(e.target); }
+  }), { rootMargin: '0px 0px -12% 0px' });
+  const observar = () => document.querySelectorAll('.cat-t:not(.enfocar)').forEach(t => { t.classList.add('enfocar'); io.observe(t); });
+  observar();
+  new MutationObserver(observar).observe(document.getElementById('carta') || document.body, { childList: true, subtree: true });
+})();
+
+// "reducir movimiento": quitar ondas de calor de la palabra de la portada (las animaciones SVG no leen la media query)
+if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+  document.querySelectorAll('#derrite animate[repeatCount="indefinite"]').forEach(a => a.remove());
+}

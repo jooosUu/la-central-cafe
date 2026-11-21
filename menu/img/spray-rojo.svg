@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 860" preserveAspectRatio="xMidYMid slice">
+  <!-- Aerosol rojo: textura original La Central (generada por script). -->
+  <defs><filter id="a" x="-40%" y="-40%" width="180%" height="180%" color-interpolation-filters="sRGB">
+    <feGaussianBlur in="SourceAlpha" stdDeviation="26" result="b"/>
+    <feTurbulence type="fractalNoise" baseFrequency="1.4" numOctaves="1" seed="9" result="n"/>
+    <feColorMatrix in="n" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  1.25 0 0 0 0" result="na"/>
+    <feComposite in="b" in2="na" operator="arithmetic" k1="0" k2="1.55" k3="-1" k4="0" result="mix"/>
+    <feComponentTransfer in="mix" result="pts"><feFuncA type="discrete" tableValues="0 1"/></feComponentTransfer>
+    <feFlood flood-color="#E4411F"/>
+    <feComposite in2="pts" operator="in"/>
+  </filter><filter id="b" x="-40%" y="-40%" width="180%" height="180%" color-interpolation-filters="sRGB">
+    <feGaussianBlur in="SourceAlpha" stdDeviation="40" result="b"/>
+    <feTurbulence type="fractalNoise" baseFrequency="1.6" numOctaves="1" seed="4" result="n"/>
+    <feColorMatrix in="n" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  1.25 0 0 0 0" result="na"/>
+    <feComposite in="b" in2="na" operator="arithmetic" k1="0" k2="1.5" k3="-1" k4="0" result="mix"/>
+    <feComponentTransfer in="mix" result="pts"><feFuncA type="discrete" tableValues="0 1"/></feComponentTransfer>
+    <feFlood flood-color="#B8321A"/>
+    <feComposite in2="pts" operator="in"/>
+  </filter></defs>
+  <g filter="url(#b)"><ellipse cx="288" cy="11" rx="82" ry="114" transform="rotate(-12 288 11)"/><ellipse cx="268" cy="86" rx="61" ry="123" transform="rotate(-37 268 86)"/><ellipse cx="40" cy="333" rx="46" ry="76" transform="rotate(18 40 333)"/><ellipse cx="22" cy="283" rx="88" ry="95" transform="rotate(0 22 283)"/><ellipse cx="358" cy="606" rx="80" ry="65" transform="rotate(35 358 606)"/><ellipse cx="382" cy="616" rx="79" ry="87" transform="rotate(-16 382 616)"/><ellipse cx="85" cy="893" rx="82" ry="117" transform="rotate(18 85 893)"/><ellipse cx="84" cy="819" rx="68" ry="87" transform="rotate(2 84 819)"/></g>
+  <g filter="url(#a)"><ellipse cx="377" cy="112" rx="83" ry="73" transform="rotate(38 377 112)"/><ellipse cx="280" cy="48" rx="78" ry="94" transform="rotate(-28 280 48)"/><ellipse cx="27" cy="325" rx="58" ry="64" transform="rotate(-24 27 325)"/><ellipse cx="-17" cy="372" rx="75" ry="87" transform="rotate(-38 -17 372)"/><ellipse cx="348" cy="566" rx="60" ry="85" transform="rotate(12 348 566)"/><ellipse cx="392" cy="652" rx="69" ry="95" transform="rotate(39 392 652)"/><ellipse cx="30" cy="820" rx="97" ry="111" transform="rotate(-15 30 820)"/><ellipse cx="39" cy="774" rx="84" ry="73" transform="rotate(-6 39 774)"/></g>
+</svg>

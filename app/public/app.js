@@ -6,15 +6,16 @@ const cop = n => '$' + Math.round(n || 0).toLocaleString('es-CO');
 const numf = n => (Math.round(n * 100) / 100).toLocaleString('es-CO');
 const PAGOS = { efectivo: 'Efectivo', nequi: 'Nequi', daviplata: 'Daviplata', tarjeta: 'Tarjeta' };
 
-// ---------- Almacenamiento y fallback demo (para Vercel y modo sin backend) ----------
-let modoDemo = false;
+// ---------- Almacenamiento y fallback demo (solo explícito en Vercel o ?demo=1) ----------
+const ES_DEMO_HOST = location.hostname.endsWith('.vercel.app') || new URLSearchParams(location.search).get('demo') === '1';
+let modoDemo = ES_DEMO_HOST;
 
 function activarModoDemo() {
-  if (modoDemo) return;
   modoDemo = true;
   const hint = $('#demo-badge-text');
   if (hint) hint.hidden = false;
 }
+if (ES_DEMO_HOST) activarModoDemo();
 
 const SEED_USUARIOS = [
   { id: 1, usuario: 'dueno', nombre: 'Dueño', rol: 'admin', pin: '1234' },
@@ -375,26 +376,24 @@ async function api(method, path, body) {
   if (modoDemo) return mockApi(method, path, body);
   try {
     const ctrl = new AbortController();
-    const to = setTimeout(() => ctrl.abort(), 3500);
+    const to = setTimeout(() => ctrl.abort(), 10000);
     const r = await fetch('/api' + path, {
       method, signal: ctrl.signal,
       headers: body ? { 'Content-Type': 'application/json' } : {},
       body: body ? JSON.stringify(body) : undefined,
     });
     clearTimeout(to);
-    if (r.status === 404 || r.status === 502 || r.status === 503) {
-      return mockApi(method, path, body);
-    }
     const data = await r.json().catch(() => ({}));
     if (r.status === 401 && path !== '/login' && path !== '/sesion') {
       mostrarLogin();
       throw new Error(data.error || 'Sesión vencida');
     }
-    if (!r.ok) throw new Error(data.error || 'Error');
+    if (!r.ok) throw new Error(data.error || `Error ${r.status}`);
     return data;
   } catch (err) {
-    if (err.name === 'AbortError' || err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError') || !navigator.onLine) {
-      return mockApi(method, path, body);
+    if (err.name === 'AbortError') throw new Error('Tiempo de espera agotado. Verifica la conexión.');
+    if (err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError') || !navigator.onLine) {
+      throw new Error('Sin conexión con el servidor de caja.');
     }
     throw err;
   }
@@ -409,60 +408,94 @@ const S = {
   comanda_id: null, comandas: [], ultimoTicket: null, filtroInv: 'todos'
 };
 
-// ---------- sonido timbre cocina (Web Audio API) ----------
+// ---------- sonido timbre cocina (Web Audio API, contexto único) ----------
+let audioCtx = null;
 function sonarTimbre() {
   try {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
     if (!AudioCtx) return;
-    const ctx = new AudioCtx();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
+    if (!audioCtx || audioCtx.state === 'closed') audioCtx = new AudioCtx();
+    if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+    const t0 = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
     osc.type = 'sine';
-    osc.frequency.setValueAtTime(880, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.6);
-    gain.gain.setValueAtTime(0.3, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+    osc.frequency.setValueAtTime(880, t0);
+    osc.frequency.exponentialRampToValueAtTime(440, t0 + 0.6);
+    gain.gain.setValueAtTime(0.3, t0);
+    gain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.6);
     osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.6);
+    gain.connect(audioCtx.destination);
+    osc.start(t0);
+    osc.stop(t0 + 0.6);
   } catch {}
 }
 
+function parseFecha(f) {
+  if (!f) return new Date();
+  if (f instanceof Date) return f;
+  const s = String(f).trim();
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(s)) return new Date(s.replace(' ', 'T') + '-05:00');
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? new Date() : d;
+}
+
 // ---------- impresión y ticket térmico ----------
+function imprimirConModo(modo) {
+  document.body.dataset.print = modo;
+  const limpiar = () => { delete document.body.dataset.print; };
+  window.addEventListener('afterprint', limpiar, { once: true });
+  window.print();
+}
+
+// Ticket térmico (80 mm, solo tinta negra). De noche (3 pm – 5 am) lleva la llama de la parrilla.
+function esHoraParrilla(d) { const h = d.getHours(); return h >= 15 || h < 5; }
+
 function generarTicketHtml(venta) {
   const d = new Date(venta.fecha || Date.now());
-  const fechaStr = d.toLocaleDateString('es-CO') + ' ' + d.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
+  const fecha = d.toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const hora = d.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: false });
   const items = venta.items || [];
+  const esPrecuenta = Boolean(venta.precuenta);
+  const noche = esHoraParrilla(d);
+  const num = String(venta.id ?? '').padStart(6, '0');
+  const fila = (izq, der, cls = '') => `<div class="tk-fila ${cls}"><span>${izq}</span><span>${der}</span></div>`;
   return `
-    <div class="ticket-termico">
-      <div class="t-center t-bold" style="font-size:15px; margin-bottom:2px;">LA CENTRAL CAFÉ</div>
-      <div class="t-center" style="font-size:10px;">NIT: 901.458.912-3</div>
-      <div class="t-center" style="font-size:10px;">Cra 4 # 12-34 · La Central</div>
-      <div class="t-sep"></div>
-      <div class="t-linea"><span>Ticket: #${venta.id}</span><span><b>${esc(venta.mesa || 'Caja')}</b></span></div>
-      <div class="t-linea"><span>Fecha:</span><span>${fechaStr}</span></div>
-      <div class="t-linea"><span>Atendió:</span><span>${esc(S.u?.nombre || 'Cajero')}</span></div>
-      <div class="t-sep"></div>
-      ${items.map(it => `
-        <div class="t-linea">
-          <span>${it.cantidad}x ${esc(it.nombre || it.producto_id)}</span>
-          <span>${cop((it.precio || 0) * (it.cantidad || 1))}</span>
-        </div>
-      `).join('')}
-      <div class="t-sep"></div>
-      ${venta.propina ? `<div class="t-linea"><span>Propina voluntaria:</span><span>${cop(venta.propina)}</span></div>` : ''}
-      <div class="t-linea t-bold" style="font-size:14px; margin: 4px 0;">
-        <span>TOTAL:</span><span>${cop(venta.total)}</span>
+    <div class="ticket-termico${noche ? ' tk-noche' : ''}">
+      <img class="tk-marca" src="${noche ? '/img/llama.svg?v=3' : '/img/taza.svg'}" alt="">
+      <img class="tk-logo" src="/img/logo-horizontal.svg?v=3" alt="la central · tunja">
+      <div class="tk-titulo">LA CENTRAL · TUNJA<br>${noche ? 'PARRILLA DE NOCHE' : 'CAFÉ DE ORIGEN'}</div>
+
+      <div class="tk-datos">
+        NIT 901.458.912-3<br>
+        CRA 4 # 12-34 · TUNJA, BOYACÁ<br>
+        ${esPrecuenta ? 'PRE-CUENTA' : 'TICKET'} N° ${esc(num)}<br>
+        ${esc(String(venta.mesa || 'CAJA').toUpperCase())} · ATENDIÓ ${esc(String(S.u?.nombre || 'CAJERO').toUpperCase())}
       </div>
-      <div class="t-linea"><span>Medio de pago:</span><span>${String(venta.pago || '').toUpperCase()}</span></div>
-      ${venta.cambio != null ? `<div class="t-linea"><span>Cambio:</span><span>${cop(venta.cambio)}</span></div>` : ''}
-      <div class="t-sep"></div>
-      <div class="t-center t-bold" style="margin-top:6px; font-size:11px;">¡Gracias por tu visita!</div>
-      <div class="t-center" style="font-size:10px;">📸 IG: @lacentral.tunja</div>
-      <div class="t-center" style="font-size:10px;">📍 Tunja · La Central Café</div>
-      <div class="t-center t-bold" style="font-size:9.5px; margin-top:3px;">⭐ ¡Califícanos en Google Maps!</div>
-      <div class="t-center" style="font-size:9px; color:#555; margin-top:2px;">lacentralcafe.onrender.com</div>
+
+      <div class="tk-items">
+        ${items.map(it => {
+          const c = it.cantidad || 1, pu = it.precio || 0;
+          return fila(`${c}X ${esc(String(it.nombre || it.producto_id).toUpperCase())}`, cop(pu * c));
+        }).join('')}
+      </div>
+
+      ${venta.propina ? fila('PROPINA VOLUNTARIA', cop(venta.propina)) : ''}
+      ${fila(esPrecuenta ? 'SUBTOTAL' : 'TOTAL', cop(venta.total), 'tk-total')}
+      ${esPrecuenta
+        ? '<div class="tk-aviso">NO VÁLIDO COMO COMPROBANTE DE PAGO</div>'
+        : fila(esc(String(venta.pago || '').toUpperCase()), cop((venta.total || 0) + (venta.cambio || 0))) +
+          (venta.cambio != null ? fila('CAMBIO', cop(venta.cambio)) : '')}
+
+      <div class="tk-pie2">
+        ${fila('CAJA 1', esc(String(venta.mesa || 'CAJA').toUpperCase()))}
+        ${fila(fecha, hora)}
+      </div>
+
+      <div class="tk-gracias">${noche ? 'GRACIAS POR VENIR AL FUEGO' : 'GRACIAS POR TU VISITA'}</div>
+      <div class="tk-pie">@LACENTRAL.TUNJA</div>
+      <div class="tk-pie">COMPROBANTE DE VENTA · NO ES FACTURA ELECTRÓNICA</div>
+      ${noche ? '<img class="tk-mancha" src="/img/llama.svg?v=3" alt="">' : ''}
     </div>
   `;
 }
@@ -471,14 +504,14 @@ function imprimirTicket(venta) {
   const printArea = $('#ticket-print');
   if (!printArea) return;
   printArea.innerHTML = generarTicketHtml(venta);
-  window.print();
+  imprimirConModo('ticket');
 }
 
 function compartirTicketWhatsApp(venta) {
-  const d = new Date(venta.fecha || Date.now());
+  const d = parseFecha(venta.fecha);
   const fechaStr = d.toLocaleDateString('es-CO') + ' ' + d.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
   const items = venta.items || [];
-  let txt = `*🧾 TICKET DE COMPRA - LA CENTRAL CAFÉ*\n`;
+  let txt = `*🧾 TICKET DE COMPRA - LA CENTRAL · TUNJA*\n`;
   txt += `*Ticket:* #${venta.id} | *${venta.mesa || 'Caja'}*\n`;
   txt += `*Fecha:* ${fechaStr}\n`;
   txt += `--------------------------------\n`;
@@ -489,7 +522,7 @@ function compartirTicketWhatsApp(venta) {
   if (venta.propina) txt += `*Propina voluntaria:* ${cop(venta.propina)}\n`;
   txt += `*TOTAL:* ${cop(venta.total)} (${String(venta.pago || '').toUpperCase()})\n`;
   if (venta.cambio != null) txt += `*Cambio entregado:* ${cop(venta.cambio)}\n`;
-  txt += `\n¡Gracias por tu compra en La Central Café! ☕\n\n`;
+  txt += `\n¡Gracias por tu compra en La Central! ☕\n\n`;
   txt += `📍 *Google Maps:* https://www.google.com/maps/place/La+Central+Caf%C3%A9/@5.5591249,-73.3519444,17z/data=!3m1!4b1!4m6!3m5!1s0x8e6a7db7cf35b097:0xa33f85c90770b3aa!8m2!3d5.5591249!4d-73.3493695!16s%2Fg%2F11nw2z8k38\n`;
   txt += `📸 *Instagram:* https://www.instagram.com/lacentral.tunja/\n`;
   txt += `⭐ ¿Cómo estuvo tu café? ¡Déjanos tu reseña en Google! ✨`;
@@ -556,8 +589,13 @@ function abrirModal(titulo, html, onOk, { ok = 'guardar', ancho = false } = {}) 
 // ---------- ingreso ----------
 let quien = null;
 async function mostrarLogin() {
+  S.u = null; S.carrito = []; S.comanda_id = null;
+  pollInicializado = false; nPendientesPrev = 0;
   $('#app').hidden = true; $('#login').hidden = false;
-  const us = await api('GET', '/usuarios-login').catch(() => []);
+  $('#login-error').textContent = '';
+  let us = [];
+  try { us = await api('GET', '/usuarios-login'); }
+  catch (err) { $('#login-error').textContent = err.message || 'Sin conexión con el servidor'; }
   $('#quien').innerHTML = us.map(u => `<button type="button" role="radio" aria-checked="false" data-u="${esc(u.usuario)}">${esc(u.nombre)}</button>`).join('');
   $$('#quien button').forEach(b => b.onclick = () => {
     quien = b.dataset.u;
@@ -606,16 +644,17 @@ function actualizarBadges() {
   $('#badge-mesas').hidden = !ocupadas; $('#badge-mesas').textContent = ocupadas;
 }
 
-let nPendientesPrev = 0;
+let nPendientesPrev = 0, pollInicializado = false;
 setInterval(async () => {
   if (!S.u) return;
   try {
     const cs = await api('GET', '/comandas');
     const nPend = cs.filter(c => c.estado === 'pendiente').length;
-    if (nPend > nPendientesPrev && nPendientesPrev !== 0) {
+    if (pollInicializado && nPend > nPendientesPrev) {
       sonarTimbre();
       toast('🔔 ¡Nueva comanda recibida en cocina!', 'warn');
     }
+    pollInicializado = true;
     nPendientesPrev = nPend;
     S.comandas = cs;
     actualizarBadges();
@@ -667,7 +706,7 @@ function mesas() {
 
 function tiempoRelativo(fechaStr) {
   if (!fechaStr) return '';
-  const diffMin = Math.max(0, Math.round((Date.now() - new Date(fechaStr).getTime()) / 60000));
+  const diffMin = Math.max(0, Math.round((Date.now() - parseFecha(fechaStr).getTime()) / 60000));
   if (diffMin <= 1) return 'hace un momento';
   if (diffMin < 60) return `hace ${diffMin} min`;
   const h = Math.floor(diffMin / 60), m = diffMin % 60;
@@ -738,7 +777,7 @@ function renderMesas() {
   $$('[data-precuenta]').forEach(b => b.onclick = () => {
     const c = (S.comandas || []).find(x => x.id === Number(b.dataset.precuenta));
     if (!c) return;
-    const ticketData = { id: c.id, mesa: c.mesa, fecha: c.fecha, total: c.total, pago: 'pendiente', items: c.items };
+    const ticketData = { id: c.id, mesa: c.mesa, fecha: c.fecha, total: c.total, pago: 'pendiente', precuenta: true, items: c.items };
     abrirModal(`pre-cuenta · ${c.mesa}`, `
       <div style="text-align:center;">
         <p class="muted">Resumen para entregar en la mesa:</p>
@@ -859,6 +898,7 @@ function tile(p) {
 }
 function agregar(pid, variante) {
   const p = S.productos.find(x => x.id === pid);
+  if (!p) return;
   const en = S.carrito.filter(l => l.id === pid && l.variante === variante).reduce((a, l) => a + l.cantidad, 0);
   if (disponibles(pid, variante) <= en) toast(`Ojo: según el inventario no alcanza para otro ${p.nombre}`, 'warn');
   const l = S.carrito.find(l => l.id === pid && l.variante === variante);
@@ -964,7 +1004,8 @@ async function cobrar() {
     </div>
   `, async () => {
     const finalTotal = baseTotal + propina;
-    const finalRecibido = pagoSelec === 'efectivo' ? (Number($('#modal-recibido')?.value.replace(/\D/g, '')) || finalTotal) : null;
+    const rawRec = $('#modal-recibido')?.value.replace(/\D/g, '') || '';
+    const finalRecibido = pagoSelec === 'efectivo' ? (rawRec ? Number(rawRec) : finalTotal) : null;
     if (pagoSelec === 'efectivo' && finalRecibido < finalTotal) {
       throw new Error('El efectivo recibido es menor al total');
     }
@@ -1115,6 +1156,7 @@ function editarInsumo(i) {
     <label class="campo"><span>costo por unidad</span><input name="costo" inputmode="numeric" value="${i?.costo ?? 0}"></label>
     ${i ? `<label class="check"><input type="checkbox" name="activo" ${i.activo ? 'checked' : ''}> activo</label>` : ''}`, async fd => {
     const b = Object.fromEntries(fd);
+    for (const k of ['minimo', 'costo']) if (b[k]) b[k] = b[k].replace(/\./g, '').replace(',', '.');
     if (i) b.activo = fd.has('activo');
     if (i) await api('PUT', `/insumos/${i.id}`, b); else await api('POST', '/insumos', b);
     await cargar(); inventario(); toast('Guardado');
@@ -1173,7 +1215,7 @@ async function reportes() {
     <figure class="fig"><figcaption>ventas (${ventas.length})</figcaption>
       <div class="scroll-x"><table class="tabla"><thead><tr><th>#</th><th>hora</th><th>detalle</th><th>pago</th><th class="n">total</th>${admin ? '<th></th>' : ''}</tr></thead><tbody>
       ${ventas.map(v => `<tr class="${v.anulada ? 'anulada' : ''}"><td>${v.id}</td><td>${esc(v.fecha.slice(desde === hasta ? 11 : 5, 16))}</td>
-        <td>${v.items.map(i => `${i.cantidad}× ${esc(i.nombre)}`).join(', ')}<br><small class="muted">${esc(v.usuario)}</small></td>
+        <td>${v.items.map(i => `${i.cantidad}× ${esc(i.nombre)}`).join(', ')}<br><small class="muted">${esc(v.usuario)}${v.mesa ? ` · ${esc(v.mesa)}` : ''}${v.propina ? ` · propina ${cop(v.propina)}` : ''}</small></td>
         <td>${PAGOS[v.pago] || esc(v.pago)}</td><td class="n">${cop(v.total)}${v.anulada ? '<br><small>anulada</small>' : ''}</td>
         ${admin ? `<td>${v.anulada ? '' : `<button class="btn btn-sm link" data-anular="${v.id}">anular</button>`}</td>` : ''}</tr>`).join('')}
       </tbody></table></div></figure>
@@ -1187,11 +1229,8 @@ async function reportes() {
       await api('POST', `/ventas/${b.dataset.anular}/anular`); await cargar(); reportes(); toast('Venta anulada');
     }, { ok: 'sí, anular' }));
   $('#csv').onclick = () => {
-    const filas = [['venta', 'fecha', 'usuario', 'pago', 'total', 'anulada', 'detalle'],
-      ...ventas.map(v => [v.id, v.fecha, v.usuario, v.pago, v.total, v.anulada ? 'si' : 'no', v.items.map(i => `${i.cantidad}x ${i.nombre}`).join(' | ')])];
-    const csv = '﻿' + filas.map(f => f.map(c => `"${String(c).replace(/"/g, '""')}"`).join(';')).join('\n');
-    const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob([csv], { type: 'text/csv' })), download: `ventas_${desde}_${hasta}.csv` });
-    a.click(); URL.revokeObjectURL(a.href);
+    const filas = ventas.map(v => [v.id, v.fecha, v.mesa || 'Caja', v.usuario, v.pago, v.propina || 0, v.total, v.anulada ? 'si' : 'no', v.items.map(i => `${i.cantidad}x ${i.nombre}`).join(' | ')]);
+    descargarCSV(`ventas_${desde}_${hasta}`, ['Venta', 'Fecha', 'Mesa', 'Usuario', 'Pago', 'Propina', 'Total', 'Anulada', 'Detalle'], filas);
   };
   $('#cierre').onclick = () => cierre(r, desde, hasta);
   // tooltip de barras
@@ -1212,7 +1251,8 @@ function cierre(r, desde, hasta) {
       </ul>
       <label class="campo"><span>efectivo contado en caja</span><input id="contado" inputmode="numeric" placeholder="$"></label>
       <div class="cambio" id="dif"><span>diferencia vs. esperado (${cop(ef)})</span><b>—</b></div>
-    </div>`, () => { window.print(); return false; }, { ok: 'imprimir' });
+      ${r.propinas ? `<p class="muted" style="margin-top:8px;">Incluye propinas registradas: <b>${cop(r.propinas)}</b></p>` : ''}
+    </div>`, () => { imprimirConModo('cierre'); return false; }, { ok: 'imprimir' });
   $('#contado').oninput = e => {
     const v = Number(e.target.value.replace(/\D/g, '')) || 0, d = v - ef;
     $('#dif b').textContent = v ? (d === 0 ? 'cuadra ✓' : (d > 0 ? 'sobran ' : 'faltan ') + cop(Math.abs(d))) : '—';
@@ -1264,9 +1304,13 @@ async function ajustes() {
   $$('tr[data-p]').forEach(tr => {
     const guardar = async (campo, valor) => {
       try { await api('PUT', `/productos/${tr.dataset.p}`, { [campo]: valor }); await cargar(); toast('Precio actualizado'); }
-      catch (e) { toast(e.message, 'warn'); }
+      catch (e) { toast(e.message, 'warn'); await cargar(); ajustes(); }
     };
-    $$('.in-precio', tr).forEach(i => i.onchange = () => guardar(i.name, i.value.replace(/\D/g, '')));
+    $$('.in-precio', tr).forEach(i => i.onchange = () => {
+      const val = i.value.replace(/\D/g, '');
+      if (i.name === 'precio' && val === '') { toast('Falta el precio', 'warn'); ajustes(); return; }
+      guardar(i.name, val);
+    });
     $('[name=activo]', tr).onchange = e => guardar('activo', e.target.checked);
   });
   $$('[data-receta]').forEach(b => b.onclick = () => editarReceta(b.dataset.receta));
@@ -1321,10 +1365,10 @@ function nuevaCategoria() {
 function mostrarQR(lista) {
   abrirModal(`QR · ${lista.length} mesas`, `
     <div class="qr-grid imprimible" id="qr-print">${lista.map(q => `
-      <figure class="qr-card"><div class="qr-logo" data-svg="/img/logo-horizontal.svg"></div>
+      <figure class="qr-card"><div class="qr-logo" data-svg="/img/logo-horizontal.svg?v=3"></div>
         <div class="qr-code">${q.svg}</div>
         <figcaption><b>mesa ${q.mesa}</b><span>escanea y mira el menú en 3D</span></figcaption></figure>`).join('')}</div>`,
-  () => { window.print(); return false; }, { ok: 'imprimir', ancho: true });
+  () => { imprimirConModo('qr'); return false; }, { ok: 'imprimir', ancho: true });
   pintarSVGs($('#qr-print'));
 }
 

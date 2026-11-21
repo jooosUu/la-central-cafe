@@ -2,6 +2,8 @@
    blanco y negro, Utendo en minúscula, regla gruesa redondeada, puntos guía, íconos en anillo. */
 @font-face { font-family: Utendo; src: url(fonts/Utendo-Medium.ttf); font-weight: 500; font-display: swap; }
 @font-face { font-family: Utendo; src: url(fonts/Utendo-ExtraBold.ttf); font-weight: 800; font-display: swap; }
+@font-face { font-family: 'Space Mono'; src: url(fonts/SpaceMono-Regular.ttf); font-weight: 400; font-display: swap; }
+@font-face { font-family: 'Space Mono'; src: url(fonts/SpaceMono-Bold.ttf); font-weight: 700; font-display: swap; }
 @font-face { font-family: Geist; src: url(fonts/Geist-VariableFont_wght.ttf); font-weight: 100 900; font-display: swap; }
 
 :root {
@@ -13,6 +15,7 @@
   --rule: 7px;          /* grosor de la regla, como en el .ai */
   --ring: 2.6px;        /* grosor de los anillos */
   --r: 22px;
+  --fuego: var(--ink);  /* acento: igual a la tinta de día; rojo en modo parrilla */
 }
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; scroll-padding-top: 76px; -webkit-text-size-adjust: 100%; overflow-x: hidden; }
@@ -73,7 +76,7 @@ button.ring:active { transform: scale(.92); }
 
 /* ---------- pestañas ---------- */
 .tabs { position: sticky; top: 0; z-index: 5; display: flex; gap: var(--s2); overflow-x: auto; scrollbar-width: none;
-  padding: var(--s3) var(--pad); background: rgba(255, 255, 255, .94); backdrop-filter: blur(8px); }
+  padding: var(--s3) var(--pad); background: color-mix(in srgb, var(--bg) 94%, transparent); backdrop-filter: blur(8px); }
 .tabs::-webkit-scrollbar { display: none; }
 .tab { flex: none; min-height: 44px; display: inline-flex; align-items: center; text-decoration: none; color: var(--ink);
   font: 800 16px/1 Utendo; padding: 0 18px; border-radius: 99px; border: var(--ring) solid var(--ink); transition: background .15s, color .15s; }
@@ -499,3 +502,272 @@ dialog#modal-feedback[open] { display: flex; flex-direction: column; animation: 
 .fb-footer { text-align: center; border-top: 1px solid #E5E7EB; padding-top: 10px; }
 .btn-fb-close { font: 800 12px Utendo; color: var(--mute); cursor: pointer; text-decoration: underline; background: none; border: 0; }
 .btn-fb-close:hover { color: var(--ink); }
+
+/* =================================================================
+   MODO PARRILLA (desde las 3 pm)
+   Lenguaje: fuego fuera de foco. Manchas rojas y negras desenfocadas (como sombras de llamas),
+   logotipo con borde de tinta corrida y halo, llama de pincel, serif alta de alto contraste
+   para títulos/precios y letra de máquina (Space Mono) para datos pequeños. Grano de foto encima.
+   Todo el menú usa --bg/--ink, así que basta con cambiar las variables.
+   ================================================================= */
+:root {
+  --serif: "Bodoni Moda", "Bodoni 72", "Bodoni MT", Didot, "Playfair Display", Georgia, serif;
+  --mono: "Space Mono", ui-monospace, Consolas, monospace;
+}
+html { transition: background-color .8s ease; }
+body, .tabs, .tab, .ring, .foot, .regla { transition: background-color .8s ease, color .8s ease, border-color .8s ease; }
+.noche, .ambiente, .foot-humo { display: none; }
+.brasa-dot { display: none; }
+
+html[data-modo="parrilla"] {
+  --bg: #0C0A09; --ink: #F1E7D6; --soft: #17120F; --mute: #A3978A;
+  --fuego: #E4411F;
+  background: var(--bg); color-scheme: dark;
+}
+html[data-modo="parrilla"] body { background: transparent; }
+
+/* --- manchas de fuego desenfocadas, fijas detrás del contenido --- */
+html[data-modo="parrilla"] .ambiente { display: block; position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
+.ambiente i { position: absolute; border-radius: 50%; filter: blur(70px); will-change: transform; animation: deriva 26s ease-in-out infinite alternate; }
+.ambiente i:nth-child(1) { width: 85vmax; height: 60vmax; left: 20%; top: -32vmax; background: var(--fuego); opacity: .38; }
+.ambiente i:nth-child(2) { width: 40vmax; height: 55vmax; left: 52%; top: -10vmax; background: #000; opacity: .85; filter: blur(50px); animation-duration: 19s; }
+.ambiente i:nth-child(3) { width: 70vmax; height: 40vmax; left: -30%; bottom: -26vmax; background: var(--fuego); opacity: .16; animation-duration: 31s; }
+@keyframes deriva { to { transform: translate3d(-6%, 4%, 0) scale(1.08); } }
+
+/* --- grano de foto --- */
+html[data-modo="parrilla"] body::before {
+  content: ""; position: fixed; inset: 0; z-index: 50; pointer-events: none; opacity: .11; mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* --- portada --- */
+html[data-modo="parrilla"] .intro-t { display: none; }
+html[data-modo="parrilla"] .noche { display: block; }
+.noche-kicker { font: 400 11.5px/1.3 var(--mono); text-transform: uppercase; letter-spacing: .14em; color: var(--mute); text-align: center; }
+.noche-hero { position: relative; margin: var(--s5) 0 var(--s2); }
+.noche-word { display: block; position: relative; z-index: 1; width: 100%; height: auto; overflow: visible;
+  animation: aparece 1.4s cubic-bezier(.16, 1, .3, 1) backwards; }
+.noche-word path { fill: var(--ink); }
+/* la llama: roja, detrás de la palabra, desenfocada como una llama real vista a través del humo */
+.noche-llama { position: absolute; z-index: 0; left: 50%; top: 50%; width: clamp(110px, 32%, 230px); translate: -50% -52%;
+  color: var(--fuego); line-height: 0; filter: blur(1.2px); opacity: .95; animation: arde 3.6s ease-in-out infinite; transform-origin: 50% 100%; }
+.noche-llama svg { width: 100%; height: auto; display: block; }
+@keyframes arde { 50% { transform: scale(1.03, 1.05); filter: blur(2.2px); } }
+@keyframes aparece { from { opacity: 0; transform: translateX(-14px); } }
+.noche-tag { margin-top: var(--s3); text-align: center; font: italic 400 clamp(20px, 5.4vw, 30px)/1.1 var(--serif); color: var(--ink); }
+html[data-modo="parrilla"] .hint { font-family: var(--mono); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+
+/* --- títulos en serif alta; entran enfocándose --- */
+html[data-modo="parrilla"] .cat-t { font: 400 clamp(56px, 18vw, 112px)/.86 var(--serif); text-transform: uppercase; letter-spacing: -.01em;
+  color: var(--ink); transform: scaleY(1.12); transform-origin: left bottom; }
+html[data-modo="parrilla"] .cat-t.enfocar { filter: blur(14px); opacity: .2; transition: filter 1.1s cubic-bezier(.16, 1, .3, 1), opacity 1.1s cubic-bezier(.16, 1, .3, 1); }
+html[data-modo="parrilla"] .cat-t.enfocar.enfocado { filter: none; opacity: 1; }
+html[data-modo="parrilla"] .regla { background: var(--fuego); height: 2px; }
+
+/* --- precios: cursiva roja, como un teléfono de reservas --- */
+html[data-modo="parrilla"] .precios2 b { font: italic 400 clamp(32px, 9vw, 44px)/1 var(--serif); color: var(--fuego); }
+html[data-modo="parrilla"] .pre { font-family: var(--serif); font-style: italic; font-size: 1.15em; color: var(--fuego); }
+html[data-modo="parrilla"] .precios2 small,
+html[data-modo="parrilla"] .precios2 span,
+html[data-modo="parrilla"] .desc { font-family: var(--mono); font-size: 11.5px; letter-spacing: .02em; }
+html[data-modo="parrilla"] .precios2 small { text-transform: uppercase; letter-spacing: .12em; font-weight: 400; }
+html[data-modo="parrilla"] .dots { border-bottom-style: dotted; border-width: 0 0 2px; border-color: color-mix(in srgb, var(--ink) 30%, transparent); }
+html[data-modo="parrilla"] .precios2 { border-top: 1px solid color-mix(in srgb, var(--ink) 25%, transparent); }
+html[data-modo="parrilla"] .precios2 > div + div { border-left-width: 1px; border-color: color-mix(in srgb, var(--ink) 25%, transparent); }
+
+/* --- controles --- */
+html[data-modo="parrilla"] .tabs { background: color-mix(in srgb, var(--bg) 80%, transparent); }
+html[data-modo="parrilla"] .tab { font: 400 12.5px/1 var(--mono); text-transform: uppercase; letter-spacing: .1em; border-width: 1.5px; }
+html[data-modo="parrilla"] .tab.on { background: var(--fuego); border-color: var(--fuego); color: var(--ink); }
+html[data-modo="parrilla"] .foto { background: radial-gradient(60% 60% at 50% 65%, color-mix(in srgb, var(--fuego) 35%, #1a100b), #120d0b 75%); }
+html[data-modo="parrilla"] .btn-review-pill,
+html[data-modo="parrilla"] .menu-search-bar input { color: var(--ink); background: color-mix(in srgb, var(--soft) 80%, transparent); border-color: #3A302A; }
+html[data-modo="parrilla"] .menu-search-bar input { font-family: var(--mono); font-size: 13px; }
+
+/* --- pie: campo rojo con sombras negras fuera de foco, logo crema --- */
+html[data-modo="parrilla"] .foot { position: relative; overflow: hidden; isolation: isolate; background: var(--fuego); color: var(--ink); }
+html[data-modo="parrilla"] .foot-humo { display: block; position: absolute; inset: 0; z-index: -1; pointer-events: none; }
+.foot-humo i { position: absolute; background: #0C0A09; border-radius: 45% 55% 40% 60%; filter: blur(26px); opacity: .85; }
+.foot-humo i:nth-child(1) { width: 34%; height: 140%; left: 8%; top: 10%; transform: rotate(-8deg); }
+.foot-humo i:nth-child(2) { width: 22%; height: 120%; left: 46%; top: 30%; transform: rotate(6deg); opacity: .7; }
+.foot-humo i:nth-child(3) { width: 30%; height: 150%; right: -6%; top: -10%; transform: rotate(-4deg); }
+html[data-modo="parrilla"] .foot-logo svg { color: var(--ink); filter: drop-shadow(0 0 10px rgba(241, 231, 214, .35)); }
+html[data-modo="parrilla"] .foot-logo svg path[fill="#fff"] { fill: #0C0A09; }
+html[data-modo="parrilla"] .iconos-inv svg { color: var(--ink); }
+html[data-modo="parrilla"] .foot p { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: var(--ink); }
+
+@media (prefers-reduced-motion: reduce) {
+  .ambiente i, .noche-llama, .noche-word { animation: none; }
+  html, body, .tabs, .tab, .ring, .foot, .regla { transition: none; }
+}
+
+/* logo de la cabecera en modo parrilla: la taza va "recortada" en el color del fondo, no en blanco fijo */
+html[data-modo="parrilla"] .logo svg path[fill="#fff"] { fill: var(--bg); }
+
+/* =================================================================
+   MODO PARRILLA · PORTADA DE AEROSOL (rebranding "la central · tunja")
+   Cabecera + portada a todo el ancho: campo rojo con llamas negras pintadas con spray
+   (fuego en tiempo real, ver fuego.js). El resto de la página:
+   negro con nubes rojas de spray (img/spray-fondo.png).
+   ================================================================= */
+html[data-modo="parrilla"] .top,
+html[data-modo="parrilla"] .intro {
+  margin-inline: calc(50% - 50vw);
+  padding-inline: calc(50vw - 50% + var(--pad));
+  background-color: var(--fuego);
+}
+html[data-modo="parrilla"] .intro {
+  display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start;
+  min-height: min(92svh, 860px); padding-bottom: var(--s6);
+  background-size: auto 100%; background-repeat: repeat-x; background-position: center bottom;
+}
+html[data-modo="parrilla"] .noche { flex: 1; display: flex; flex-direction: column; }
+html[data-modo="parrilla"] .noche-kicker { color: #0C0A09; }
+html[data-modo="parrilla"] .noche-hero { margin: var(--s6) 0 0; }
+/* la llama de la gota baja a la zona negra, en rojo (como la llama del cartel) */
+html[data-modo="parrilla"] .noche-llama { position: relative; left: auto; top: auto; translate: none; display: block;
+  width: clamp(96px, 28vw, 190px); margin: auto auto 0; padding-top: var(--s5); filter: blur(.6px); }
+html[data-modo="parrilla"] .noche-tag { color: var(--ink); margin-top: var(--s4); }
+html[data-modo="parrilla"] .intro .hint { color: var(--ink); margin-top: var(--s4); justify-content: center; }
+html[data-modo="parrilla"] .intro .hint b { color: var(--ink); }
+
+/* fondo del resto de la página: spray rojo sobre negro */
+html[data-modo="parrilla"] .ambiente { background: url(img/spray-fondo.png) center / cover no-repeat; opacity: .85; }
+html[data-modo="parrilla"] .ambiente i { display: none; }
+
+/* cabecera sobre rojo */
+html[data-modo="parrilla"] .top { padding-bottom: 0; }
+html[data-modo="parrilla"] .btn-lang,
+html[data-modo="parrilla"] .btn-caja-staff { background: transparent; color: #0C0A09; border-color: #0C0A09; }
+html[data-modo="parrilla"] .logo svg { color: #0C0A09; }
+html[data-modo="parrilla"] .logo svg path[fill="#fff"] { fill: var(--fuego); }
+
+@media (min-width: 900px) {
+  html[data-modo="parrilla"] .intro { display: flex; }
+  html[data-modo="parrilla"] .noche-hero { max-width: 760px; margin-inline: auto; width: 100%; }
+}
+
+/* =================================================================
+   FUEGO EN TIEMPO REAL (portada y pie, modo parrilla) — ver fuego.js
+   La portada pasa a ser una chimenea: negro arriba, fuego vivo subiendo desde abajo.
+   ================================================================= */
+canvas.fuego { display: none; }
+html[data-modo="parrilla"] canvas.fuego { display: block; position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; }
+/* sin WebGL: brasa estática */
+html[data-modo="parrilla"] canvas.fuego.sin-webgl { background: radial-gradient(120% 70% at 50% 110%, #FFB54A, #E4411F 35%, #3a0a03 65%, #0C0A09); }
+
+html[data-modo="parrilla"] .top,
+html[data-modo="parrilla"] .intro { background-color: #0C0A09; }
+html[data-modo="parrilla"] .intro { position: relative; isolation: isolate; background-image: none; }
+html[data-modo="parrilla"] .logo svg { color: var(--ink); }
+html[data-modo="parrilla"] .logo svg path[fill="#fff"] { fill: #0C0A09; }
+html[data-modo="parrilla"] .btn-lang,
+html[data-modo="parrilla"] .btn-caja-staff { color: var(--ink); border-color: var(--ink); }
+html[data-modo="parrilla"] .noche-kicker { color: var(--mute); }
+/* la llama de la gota: marca pequeña crema encima de la palabra */
+html[data-modo="parrilla"] .noche-llama { order: 1; width: clamp(54px, 13vw, 84px); margin: var(--s5) auto 0; padding: 0;
+  color: var(--ink); filter: none; animation: none; }
+html[data-modo="parrilla"] .noche-kicker { order: 0; }
+html[data-modo="parrilla"] .noche-hero { order: 2; margin-top: var(--s3); }
+html[data-modo="parrilla"] .noche-tag { order: 3; text-shadow: 0 2px 18px rgba(0, 0, 0, .6); }
+html[data-modo="parrilla"] .intro .hint { text-shadow: 0 1px 10px rgba(0, 0, 0, .7); margin-top: auto; }
+
+/* pie: fuego subiendo detrás del logo */
+html[data-modo="parrilla"] .foot { background: #0C0A09; }
+html[data-modo="parrilla"] .foot-humo, html[data-modo="parrilla"] .llamas { display: none !important; }
+html[data-modo="parrilla"] .foot > *:not(canvas) { position: relative; }
+
+/* transición suave: la base del fuego se funde en negro y deja un brillo de brasa que baja hacia la carta */
+html[data-modo="parrilla"] .intro canvas.fuego {
+  -webkit-mask-image: linear-gradient(to top, transparent 0, #000 26%);
+          mask-image: linear-gradient(to top, transparent 0, #000 26%);
+}
+html[data-modo="parrilla"] .intro::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: -140px; height: 260px; z-index: -2; pointer-events: none;
+  background: radial-gradient(60% 55% at 50% 40%, rgba(228, 65, 31, .28), rgba(120, 30, 10, .12) 45%, transparent 75%);
+}
+html[data-modo="parrilla"] .intro { background-color: transparent; }
+html[data-modo="parrilla"] .ambiente { display: none !important; }
+html[data-modo="parrilla"], html[data-modo="parrilla"] body { background: #0C0A09; }
+/* el body recortaba (overflow-x:hidden) todo lo que sale de sus 1280px: la portada a todo el ancho se cortaba
+   en pantallas anchas. El recorte horizontal ya lo hace <html>. */
+html[data-modo="parrilla"] body { overflow-x: visible; }
+@media (max-width: 700px) {
+  html[data-modo="parrilla"] .intro { min-height: min(74svh, 640px); }
+}
+/* el fuego se dibuja a media resolución: los puntos de spray quedan nítidos, no borrosos */
+html[data-modo="parrilla"] canvas.fuego { image-rendering: pixelated; }
+
+/* pie de lado a lado (como la portada) */
+.foot { margin-inline: calc(50% - 50vw); padding-inline: calc(50vw - 50% + var(--pad)); border-radius: 0; }
+/* el recorte horizontal lo hace <html>; si lo hace el body, corta lo que va de lado a lado */
+body { overflow-x: visible; }
+
+/* al llegar al final no "rebota" la página (el rebote dejaba ver un hueco debajo del pie) */
+html { overscroll-behavior-y: none; }
+/* y por si algún navegador rebota igual: la base del fuego del pie se funde en el negro del fondo */
+html[data-modo="parrilla"] .foot canvas.fuego {
+  -webkit-mask-image: linear-gradient(to top, transparent 0, #000 16%);
+          mask-image: linear-gradient(to top, transparent 0, #000 16%);
+}
+html[data-modo="parrilla"] .foot { padding-bottom: calc(var(--s7) + var(--s5) + env(safe-area-inset-bottom)); }
+
+/* =================================================================
+   PEDIDO (carrito) EN MODO PARRILLA
+   Mismo lenguaje de la portada: negro brasa, serif para el título y el total,
+   letra de máquina para etiquetas, líneas finas rojas y botón de WhatsApp en rojo fuego.
+   ================================================================= */
+html[data-modo="parrilla"] dialog#cart-drawer {
+  background:
+    radial-gradient(120% 45% at 50% 108%, rgba(228, 65, 31, .32), rgba(110, 26, 12, .14) 45%, transparent 72%),
+    #0C0A09;
+  box-shadow: -18px 0 50px rgba(0, 0, 0, .6); border-left: 1px solid #2A221E;
+}
+html[data-modo="parrilla"] dialog#cart-drawer::backdrop { background: rgba(8, 6, 5, .72); backdrop-filter: blur(3px); }
+html[data-modo="parrilla"] .cart-head { border-bottom: 1px solid color-mix(in srgb, var(--fuego) 70%, transparent); padding-block: var(--s5); }
+html[data-modo="parrilla"] .cart-head h2 { font: 400 clamp(34px, 9vw, 44px)/.9 var(--serif); text-transform: uppercase; letter-spacing: -.01em; }
+html[data-modo="parrilla"] .cart-mesa-pill { font: 400 11px/1 var(--mono); text-transform: uppercase; letter-spacing: .12em;
+  border: 1px solid var(--fuego); color: var(--fuego); padding: 6px 10px; }
+html[data-modo="parrilla"] .cart-close-btn { background: transparent; color: var(--ink); border: 1.5px solid var(--ink); transition: background .15s, color .15s; }
+html[data-modo="parrilla"] .cart-close-btn:hover { background: var(--ink); color: #0C0A09; }
+
+html[data-modo="parrilla"] .cart-vacio { font: italic 400 20px/1.3 var(--serif); color: var(--mute); padding: 56px 16px; }
+html[data-modo="parrilla"] .cart-item-row { border-bottom: 1px dotted color-mix(in srgb, var(--ink) 25%, transparent); }
+html[data-modo="parrilla"] .cart-item-variant,
+html[data-modo="parrilla"] .cart-item-price { font-family: var(--mono); font-size: 11px; letter-spacing: .03em; }
+html[data-modo="parrilla"] .cart-item-price { color: var(--fuego); }
+html[data-modo="parrilla"] .cart-qty-btn { background: transparent; color: var(--ink); border: 1.5px solid var(--ink); }
+html[data-modo="parrilla"] .cart-qty-btn:active { background: var(--fuego); border-color: var(--fuego); }
+
+html[data-modo="parrilla"] .cart-summary-section { background: transparent; border-top: 1px solid color-mix(in srgb, var(--fuego) 70%, transparent); }
+html[data-modo="parrilla"] .cart-campo { font: 400 10.5px/1 var(--mono); text-transform: uppercase; letter-spacing: .14em; color: var(--mute); gap: 6px; }
+html[data-modo="parrilla"] .cart-campo select,
+html[data-modo="parrilla"] .cart-campo input {
+  background: rgba(241, 231, 214, .04); color: var(--ink); border: 1px solid #3A302A; border-radius: 12px;
+  font: 400 13px var(--mono); padding: 11px 14px; transition: border-color .15s, background .15s;
+}
+html[data-modo="parrilla"] .cart-campo select:focus,
+html[data-modo="parrilla"] .cart-campo input:focus { border-color: var(--fuego); background: rgba(228, 65, 31, .06); }
+html[data-modo="parrilla"] .cart-campo input::placeholder { color: #6E645B; }
+html[data-modo="parrilla"] .cart-campo select option { background: #0C0A09; color: var(--ink); }
+
+html[data-modo="parrilla"] .cart-total-bar { padding: 14px 0 6px; align-items: baseline; }
+html[data-modo="parrilla"] .cart-total-bar span { font: 400 11px/1 var(--mono); text-transform: uppercase; letter-spacing: .14em; color: var(--mute); }
+html[data-modo="parrilla"] .cart-total-bar b { font: italic 400 40px/1 var(--serif); color: var(--fuego); }
+
+html[data-modo="parrilla"] .btn-cart-main-wsp {
+  background: var(--fuego); border-color: var(--fuego); color: var(--ink);
+  font: 700 13px/1 var(--mono); text-transform: uppercase; letter-spacing: .12em; padding: 18px 20px;
+  box-shadow: 0 10px 34px -6px rgba(228, 65, 31, .55), inset 0 1px 0 rgba(255, 255, 255, .18);
+  animation: brasa-boton 3.2s ease-in-out infinite;
+}
+html[data-modo="parrilla"] .btn-cart-main-wsp:hover { opacity: 1; background: #F0532F; }
+@keyframes brasa-boton { 50% { box-shadow: 0 12px 44px -4px rgba(228, 65, 31, .8), inset 0 1px 0 rgba(255, 255, 255, .18); } }
+html[data-modo="parrilla"] .btn-cart-clear { font: 400 10.5px/1 var(--mono); text-transform: uppercase; letter-spacing: .14em; color: var(--mute); }
+
+/* botón flotante del pedido */
+html[data-modo="parrilla"] .btn-cart-float { background: #0C0A09; color: var(--ink); border: 1.5px solid var(--fuego);
+  font-family: var(--mono); box-shadow: 0 8px 30px -4px rgba(228, 65, 31, .45); }
+html[data-modo="parrilla"] .cart-count-badge { background: var(--fuego); color: var(--ink); font-family: var(--mono); }
+html[data-modo="parrilla"] .cart-total-badge { font: italic 400 17px/1 var(--serif); }
+@media (prefers-reduced-motion: reduce) { html[data-modo="parrilla"] .btn-cart-main-wsp { animation: none; } }
