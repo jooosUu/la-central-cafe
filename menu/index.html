@@ -9,15 +9,16 @@
 <link rel="preload" href="fonts/Utendo-ExtraBold.ttf" as="font" type="font/ttf" crossorigin>
 <link rel="preload" href="fonts/Utendo-Medium.ttf" as="font" type="font/ttf" crossorigin>
 <script>
-/* Modo del día: café (B/N) hasta las 3 pm; parrilla (negro + rojo fuego) desde las 3 pm.
+/* Modo del día: café (B/N) por defecto; parrilla (negro + fuego) jueves, viernes y sábado de 4 a 10 pm.
    Prueba manual: ?modo=parrilla | ?modo=cafe */
 (function () {
-  var HORA_PARRILLA = 15, HORA_CIERRE = 5; // 15:00 → 04:59 = parrilla
+  var DIAS_PARRILLA = [4, 5, 6];          // 0 = domingo … 4 = jueves, 5 = viernes, 6 = sábado
+  var DESDE = 16, HASTA = 22;              // 4:00 pm a 9:59 pm
   var forzado = new URLSearchParams(location.search).get('modo');
   function modo() {
     if (forzado === 'parrilla' || forzado === 'cafe') return forzado;
-    var h = new Date().getHours();
-    return (h >= HORA_PARRILLA || h < HORA_CIERRE) ? 'parrilla' : 'cafe';
+    var d = new Date(), h = d.getHours();
+    return (DIAS_PARRILLA.indexOf(d.getDay()) !== -1 && h >= DESDE && h < HASTA) ? 'parrilla' : 'cafe';
   }
   function aplicar() {
     var m = modo(), html = document.documentElement;
@@ -31,7 +32,7 @@
   document.addEventListener('visibilitychange', function () { if (!document.hidden) aplicar(); });
 })();
 </script>
-<link rel="stylesheet" href="styles.css?v=41">
+<link rel="stylesheet" href="styles.css?v=42">
 <script type="module" src="vendor/model-viewer.min.js"></script>
 </head>
 <body>
@@ -60,7 +61,7 @@
   <p class="intro-t" id="txt-intro-t">menú</p>
   <!-- Portada de noche (modo parrilla): logotipo fuera de foco, llama de pincel, serif + letra de máquina -->
   <div class="noche" aria-hidden="true">
-    <p class="noche-kicker" id="txt-noche-k">la central · tunja · desde las 3 pm</p>
+    <p class="noche-kicker" id="txt-noche-k">la central · tunja · jue a sáb · 4 a 10 pm</p>
     <div class="noche-hero">
       <svg class="noche-word" viewBox="0 0 600 200">
         <defs>
@@ -201,6 +202,18 @@
       </div>
     </div>
 
+    <div class="social-card sc-sellos">
+      <div class="sc-header">
+        <span class="sc-badge">TARJETA DE SELLOS</span>
+        <span class="sc-sub">8 sellos = premio</span>
+      </div>
+      <h3>tus sellos</h3>
+      <p>Cada compra es un sello. Con 8 te ganas un café gratis o 10% de descuento, lo que escojas.</p>
+      <div class="sc-actions">
+        <a href="tarjeta.html" class="btn-sc btn-sc-solid"><span>Ver mi tarjeta</span></a>
+      </div>
+    </div>
+
     <div class="social-card sc-ig">
       <div class="sc-header">
         <span class="sc-badge">INSTAGRAM</span>
@@ -301,7 +314,8 @@
   </div>
 </dialog>
 
+<script src="granos.js?v=5" defer></script>
 <script src="fuego.js?v=6" defer></script>
-<script type="module" src="app.js?v=33"></script>
+<script type="module" src="app.js?v=35"></script>
 </body>
 </html>

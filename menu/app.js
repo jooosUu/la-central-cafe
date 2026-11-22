@@ -17,7 +17,8 @@ const I18N = {
   es: {
     langCode: 'EN',
     introT: 'menú',
-    nocheK: 'la central · tunja · desde las 3 pm',
+    nocheK: 'la central · tunja · jue a sáb · 4 a 10 pm',
+    porConfirmar: 'por confirmar',
     nocheW: 'parrilla',
     nocheT: 'café de día, fuego de noche',
     hint: 'Toca <b>3D</b> para ver el plato y ponerlo sobre tu mesa.',
@@ -64,7 +65,8 @@ const I18N = {
   en: {
     langCode: 'ES',
     introT: 'menu',
-    nocheK: 'la central · tunja · from 3 pm',
+    nocheK: 'la central · tunja · thu–sat · 4–10 pm',
+    porConfirmar: 'ask us',
     nocheW: 'grill',
     nocheT: 'coffee by day, fire by night',
     hint: 'Tap <b>3D</b> to view the dish in Augmented Reality on your table.',
@@ -259,7 +261,8 @@ function guardarCarrito() {
 
 function agregarAlCarrito(itemId, variante = 'sencillo') {
   const it = byId[itemId];
-  if (!it || it.agotado) return;
+  if (!it || it.agotado || !(it.precio > 0)) return;
+  if (variante === 'combo' && (!(it.combo > 0) || it.comboAgotado)) return;
   const precioUnit = (variante === 'combo' && it.combo) ? it.combo : it.precio;
   const index = cart.findIndex(c => c.id === it.id && c.variante === variante);
   if (index >= 0) {
@@ -479,8 +482,11 @@ const btn3d = it => it.model
   ? `<button type="button" class="ring b3d" data-id="${esc(it.id)}" aria-label="Ver ${esc(it.nombre)} en 3D">3D</button>`
   : '<span class="ring b3d vacio" aria-hidden="true"></span>';
 
+// precio 0 = producto nuevo sin precio aún (se fija desde la caja): se muestra "por confirmar" y no se puede pedir
+const sinPrecio = it => !(it.precio > 0);
+const precioTxt = it => sinPrecio(it) ? I18N[lang].porConfirmar : fmt(it.precio);
 const fila = (it, extra = '') =>
-  `<div class="fila${it.agotado ? ' agotado' : ''}"><span class="nom">${esc(it.nombre)}</span><span class="dots" aria-hidden="true"></span><span class="pre">${it.agotado ? I18N[lang].agotado : fmt(it.precio)}</span>${extra}</div>`;
+  `<div class="fila${it.agotado ? ' agotado' : ''}${sinPrecio(it) ? ' sin-precio' : ''}"><span class="nom">${esc(it.nombre)}</span><span class="dots" aria-hidden="true"></span><span class="pre">${it.agotado ? I18N[lang].agotado : precioTxt(it)}</span>${extra}</div>`;
 
 function tab(id, texto) { const a = el('a', 'tab'); a.textContent = texto; a.href = '#' + id; a.dataset.cat = id; tabs.append(a); }
 
@@ -488,14 +494,21 @@ function renderCarta() {
   const t = I18N[lang];
   tabs.innerHTML = '';
   carta.innerHTML = '';
-  for (const sec of MENU) {
+  for (const k of Object.keys(byId)) delete byId[k];
+  // de día se ocultan las categorías de la parrilla; en la parrilla va todo, con lo de noche primero
+  const noche = document.documentElement.dataset.modo === 'parrilla';
+  const esNoche = sec => sec.bloques.some(b => b.horario === 'noche');
+  const secciones = noche ? [...MENU].sort((a, b) => esNoche(b) - esNoche(a)) : MENU;
+  for (const sec of secciones) {
+    const bloques = sec.bloques.filter(b => noche || b.horario !== 'noche');
+    if (!bloques.length) continue;
     const s = el('section', 'cat'); s.id = sec.id;
     const h2 = el('h2', 'cat-t'); h2.textContent = sec.titulo;
     s.append(h2, el('hr', 'regla'));
-    if (sec.bloques[0]?.tipo === 'destacado') tab(sec.id, sec.titulo);
+    if (bloques[0]?.tipo === 'destacado') tab(sec.id, sec.titulo);
 
     let dests = null, listas = null;
-    for (const b of sec.bloques) {
+    for (const b of bloques) {
       if (b.tipo === 'destacado') {
         dests ??= s.appendChild(el('div', 'dests'));
         for (const it of b.items) {
@@ -511,11 +524,11 @@ function renderCarta() {
             <div class="dest-body${it.agotado ? ' agotado' : ''}">
               <h3 class="dest-nom">${esc(it.nombre)}</h3>
               <div class="precios2${it.combo ? '' : ' uno'}">
-                <div><small>${esc(it.combo ? t.sencillo : t.precio)}</small><b>${esc(it.agotado ? t.agotado : fmt(it.precio))}</b></div>
+                <div><small>${esc(it.combo ? t.sencillo : t.precio)}</small><b>${esc(it.agotado ? t.agotado : precioTxt(it))}</b></div>
                 ${it.combo ? `<div><small>${esc(t.combo)}</small><b>${esc(it.agotado || it.comboAgotado ? t.agotado : fmt(it.combo))}</b><span>${it.comboIncluye.map(esc).join('<br>')}</span></div>` : ''}
               </div>
               ${it.desc ? `<p class="desc">${esc(it.desc)}</p>` : ''}
-              ${!it.agotado ? `
+              ${!it.agotado && !sinPrecio(it) ? `
               <div class="dest-actions">
                 <button type="button" class="btn-pedir" data-add="${esc(it.id)}" data-var="sencillo">${esc(t.pedir)}</button>
                 ${it.combo && !it.comboAgotado ? `<button type="button" class="btn-pedir btn-pedir-combo" data-add="${esc(it.id)}" data-var="combo">${esc(t.pedirCombo)}</button>` : ''}
@@ -532,7 +545,7 @@ function renderCarta() {
           byId[it.id] = it;
           const li = el('li');
           li.dataset.pid = it.id;
-          li.innerHTML = fila(it) + (it.agotado ? '' : `<button type="button" class="btn-add-item" data-add="${esc(it.id)}" data-var="sencillo" title="Agregar">${esc(t.pedir)}</button>`) + btn3d(it);
+          li.innerHTML = fila(it) + (it.agotado || sinPrecio(it) ? '' : `<button type="button" class="btn-add-item" data-add="${esc(it.id)}" data-var="sencillo" title="Agregar">${esc(t.pedir)}</button>`) + (noche && sec.id !== 'bebidas' ? btn3d(it) : '');   // 3D solo de noche y no en bebidas
           ul.append(li);
         }
         blk.append(ul);
@@ -547,6 +560,10 @@ function renderCarta() {
   if ($('#menu-search')?.value) filtrarCarta($('#menu-search').value);
   marcar();
 }
+
+// cuando cambia el modo en vivo (p. ej. a las 4 pm del jueves) la carta se vuelve a armar
+new MutationObserver(() => { if (carta.children.length) renderCarta(); })
+  .observe(document.documentElement, { attributes: true, attributeFilter: ['data-modo'] });
 
 // =================================================================== BUSCADOR INSTANTÁNEO
 const searchInput = $('#menu-search');
@@ -622,13 +639,13 @@ function abrir(it) {
   $('#v-nombre').textContent = it.nombre;
   $('#v-desc').textContent = it.desc || '';
   $('#v-precio').innerHTML = it.combo
-    ? `<span><small>${I18N[lang].sencillo}</small>${fmt(it.precio)}</span><span><small>${I18N[lang].combo}</small>${fmt(it.combo)}<em>${it.comboIncluye.map(esc).join(' · ')}</em></span>`
-    : `<span>${fmt(it.precio)}</span>`;
+    ? `<span><small>${I18N[lang].sencillo}</small>${precioTxt(it)}</span><span><small>${I18N[lang].combo}</small>${fmt(it.combo)}<em>${it.comboIncluye.map(esc).join(' · ')}</em></span>`
+    : `<span>${precioTxt(it)}</span>`;
   
   const pWrap = $('#v-pedir-wrap');
   if (pWrap) {
     const t = I18N[lang];
-    pWrap.innerHTML = !it.agotado ? `
+    pWrap.innerHTML = !it.agotado && !sinPrecio(it) ? `
       <button type="button" class="btn-pedir" id="v-add-sencillo">${esc(t.pedir)} ${esc(it.nombre)}</button>
       ${it.combo && !it.comboAgotado ? `<button type="button" class="btn-pedir btn-pedir-combo" id="v-add-combo">${esc(t.pedirCombo)}</button>` : ''}
     ` : `<span class="sello">${esc(t.agotado)}</span>`;
@@ -669,7 +686,7 @@ function reconciliarCarrito() {
   const limpio = [];
   for (const c of cart) {
     const it = byId[c.id];
-    if (!it || it.agotado) continue;
+    if (!it || it.agotado || sinPrecio(it)) continue;
     if (c.variante === 'combo' && (!it.combo || it.comboAgotado)) continue;
     const cant = Math.max(1, Math.min(99, parseInt(c.cantidad, 10) || 1));
     limpio.push({

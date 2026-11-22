@@ -771,3 +771,13 @@ html[data-modo="parrilla"] .btn-cart-float { background: #0C0A09; color: var(--i
 html[data-modo="parrilla"] .cart-count-badge { background: var(--fuego); color: var(--ink); font-family: var(--mono); }
 html[data-modo="parrilla"] .cart-total-badge { font: italic 400 17px/1 var(--serif); }
 @media (prefers-reduced-motion: reduce) { html[data-modo="parrilla"] .btn-cart-main-wsp { animation: none; } }
+
+/* =================================================================
+   PORTADA DE DÍA: "menú" hecho con granos de café (ver granos.js)
+   El texto real sigue ahí (lectores de pantalla, buscadores); solo se vuelve transparente
+   cuando los granos ya están dibujados encima.
+   ================================================================= */
+.intro { position: relative; }
+.granos { position: absolute; display: block; pointer-events: auto; touch-action: pan-y; cursor: crosshair; }
+html.granos-on:not([data-modo="parrilla"]) .intro-t { color: transparent; }
+html[data-modo="parrilla"] .granos { display: none; }

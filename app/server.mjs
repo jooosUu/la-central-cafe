@@ -60,6 +60,7 @@ function tx(fn) {
 const SESION_MS = 12 * 3600 * 1000;
 const intentos = new Map(); // ip -> [timestamps] para frenar adivinar PINs
 const feedbackIntentos = new Map(); // ip -> [timestamps] para frenar spam en feedback
+const tarjetaIntentos = new Map(); // ip -> [timestamps] para frenar que creen/consulten tarjetas en masa
 
 function clientIp(req) {
   return (TRAS_PROXY && String(req.headers['x-forwarded-for'] || '').split(',')[0].trim()) || req.socket.remoteAddress || 'local';
@@ -70,6 +71,10 @@ function limpiarLimites() {
   for (const [k, xs] of intentos) {
     const f = xs.filter(t => ahoraMs - t < 60_000);
     if (f.length) intentos.set(k, f); else intentos.delete(k);
+  }
+  for (const [k, xs] of tarjetaIntentos) {
+    const f = xs.filter(t => ahoraMs - t < 600_000);
+    if (f.length) tarjetaIntentos.set(k, f); else tarjetaIntentos.delete(k);
   }
   for (const [k, xs] of feedbackIntentos) {
     const f = xs.filter(t => ahoraMs - t < 600_000);
@@ -131,20 +136,40 @@ function registrarVenta(u, body) {
     return { p, variante, cantidad, precio, rec, costo };
   });
   const subtotal = lineas.reduce((a, l) => a + l.precio * l.cantidad, 0);
+  const premio = body.premio ? (['cafe', 'descuento'].includes(body.premio) ? body.premio : fail(400, 'Premio inválido')) : null;
   const propina = body.propina == null || body.propina === ''
     ? 0 : (num(body.propina, { min: 0, max: 10_000_000, int: true }) ?? fail(400, 'Propina inválida'));
   const mesa = texto(body.mesa, 30) || 'Caja';
-  const total = subtotal + propina;
-  let recibido = null;
+  let recibidoPre = null;
   if (pago === 'efectivo' && body.recibido != null && body.recibido !== '') {
-    recibido = num(body.recibido, { min: 0, max: 10_000_000, int: true }) ?? fail(400, 'Monto recibido inválido');
-    if (recibido < total) fail(400, 'El efectivo recibido es menor al total');
+    recibidoPre = num(body.recibido, { min: 0, max: 10_000_000, int: true }) ?? fail(400, 'Monto recibido inválido');
   }
 
   return tx(() => {
+    // validar cliente y saldo dentro de la transacción (BEGIN IMMEDIATE) para evitar doble canje concurrente
+    const cliente = body.cliente ? (buscarCliente(body.cliente) || fail(400, 'Cliente no encontrado')) : null;
+    let descuento = 0;
+    if (premio) {
+      if (!cliente) fail(400, 'El premio necesita el cliente');
+      if (saldoSellos(cliente.id) < SELLOS_META) fail(400, 'El cliente aún no completa la tarjeta');
+      if (premio === 'cafe') {
+        const cafes = lineas.filter(l => l.p.categoria === 'cafes');
+        if (!cafes.length) fail(400, 'Agrega a la cuenta el café del premio');
+        descuento = Math.max(...cafes.map(l => l.precio));
+      } else descuento = Math.round(subtotal * PREMIO_DESCUENTO / 100);
+    }
+    const total = subtotal - descuento + propina;
+    const recibido = recibidoPre;
+    if (recibido != null && recibido < total) fail(400, 'El efectivo recibido es menor al total');
+
     const fecha = ahora();
-    const ventaId = Number(db.prepare('INSERT INTO ventas (fecha, usuario_id, total, pago, recibido, mesa, propina) VALUES (?,?,?,?,?,?,?)')
-      .run(fecha, u.id, total, pago, recibido, mesa, propina).lastInsertRowid);
+    const ventaId = Number(db.prepare('INSERT INTO ventas (fecha, usuario_id, total, pago, recibido, mesa, propina, cliente_id, descuento, premio) VALUES (?,?,?,?,?,?,?,?,?,?)')
+      .run(fecha, u.id, total, pago, recibido, mesa, propina, cliente?.id ?? null, descuento, premio).lastInsertRowid);
+    if (cliente) {
+      const ms = db.prepare('INSERT INTO sellos (cliente_id, venta_id, fecha, cantidad, tipo) VALUES (?,?,?,?,?)');
+      if (premio) ms.run(cliente.id, ventaId, fecha, -SELLOS_META, 'canje');
+      ms.run(cliente.id, ventaId, fecha, 1, 'sello');
+    }
     const ii = db.prepare('INSERT INTO venta_items (venta_id, producto_id, nombre, variante, cantidad, precio, costo) VALUES (?,?,?,?,?,?,?)');
     const mv = db.prepare(`INSERT INTO movimientos (fecha, insumo_id, tipo, cantidad, costo, venta_id, usuario_id) VALUES (?,?,'venta',?,?,?,?)`);
     const st = db.prepare('UPDATE insumos SET stock = stock - ? WHERE id = ?');
@@ -161,8 +186,40 @@ function registrarVenta(u, body) {
       db.prepare(`UPDATE comandas SET estado = 'cobrado' WHERE id = ?`).run(cid);
     }
     const alertas = db.prepare('SELECT nombre, stock, minimo, unidad FROM insumos WHERE activo = 1 AND stock <= minimo ORDER BY stock').all();
-    return { id: ventaId, fecha, mesa, subtotal, propina, total, cambio: recibido != null ? recibido - total : null, alertas };
+    const tarjeta = cliente ? { nombre: cliente.nombre, sellos: saldoSellos(cliente.id), meta: SELLOS_META } : null;
+    return { id: ventaId, fecha, mesa, subtotal, descuento, premio, propina, total, tarjeta, cambio: recibido != null ? recibido - total : null, alertas };
   });
+}
+
+// ---------- tarjeta de sellos ----------
+const SELLOS_META = 8;          // sellos para el premio
+const PREMIO_DESCUENTO = 10;    // % de descuento si el cliente escoge descuento en vez del café gratis
+// celular colombiano: solo dígitos, sin el 57 de adelante
+const celular = v => {
+  let d = String(v ?? '').replace(/\D/g, '');
+  if (d.length === 12 && d.startsWith('57')) d = d.slice(2);
+  return /^\d{7,10}$/.test(d) ? d : null;
+};
+const saldoSellos = id => db.prepare('SELECT COALESCE(SUM(cantidad), 0) n FROM sellos WHERE cliente_id = ?').get(id).n;
+function buscarCliente(q) {
+  const s = String(q).trim();
+  if (/^[a-f0-9]{32}$/.test(s)) return db.prepare('SELECT * FROM clientes WHERE token = ?').get(s);
+  const tel = celular(s);
+  return tel ? db.prepare('SELECT * FROM clientes WHERE telefono = ?').get(tel) : undefined;
+}
+function tarjetaDe(c) {
+  const sellos = saldoSellos(c.id);
+  return {
+    token: c.token, nombre: c.nombre, sellos, meta: SELLOS_META, premio: sellos >= SELLOS_META, descuento: PREMIO_DESCUENTO,
+    telefono: c.telefono.slice(0, 3) + ' *** ' + c.telefono.slice(-4),
+    historial: db.prepare('SELECT fecha, cantidad, tipo FROM sellos WHERE cliente_id = ? ORDER BY id DESC LIMIT 6').all(c.id),
+  };
+}
+function limitarTarjeta(req, max) {
+  const ip = clientIp(req), t = Date.now();
+  const lista = (tarjetaIntentos.get(ip) || []).filter(x => t - x < 600_000);
+  if (lista.length >= max) fail(429, 'Demasiados intentos. Intenta en unos minutos.');
+  lista.push(t); tarjetaIntentos.set(ip, lista);
 }
 
 function anularVenta(u, id) {
@@ -171,6 +228,7 @@ function anularVenta(u, id) {
   return tx(() => {
     const fecha = ahora();
     db.prepare('UPDATE ventas SET anulada = 1 WHERE id = ?').run(id);
+    db.prepare('DELETE FROM sellos WHERE venta_id = ?').run(id);   // se devuelven el sello y, si hubo, el premio
     const movs = db.prepare(`SELECT insumo_id, cantidad, costo FROM movimientos WHERE venta_id = ? AND tipo = 'venta'`).all(id);
     for (const m of movs) {
       db.prepare('UPDATE insumos SET stock = stock - ? WHERE id = ?').run(m.cantidad, m.insumo_id); // cantidad es negativa
@@ -257,7 +315,7 @@ function carta() {
     if (!items.length) continue;
     let sec = secciones.find(x => x.titulo === c.seccion);
     if (!sec) secciones.push(sec = { id: slug(c.seccion), titulo: c.seccion, bloques: [] });
-    sec.bloques.push({ tipo: c.tipo, id: slug(c.id), subtitulo: c.tipo === 'lista' ? c.nombre : null, items });
+    sec.bloques.push({ tipo: c.tipo, id: slug(c.id), subtitulo: c.tipo === 'lista' ? c.nombre : null, horario: c.horario || 'siempre', items });
   }
   const whatsapp = String(process.env.WHATSAPP_PEDIDOS || '').replace(/\D/g, '');
   return { secciones, ...(whatsapp ? { whatsapp } : {}) };
@@ -376,6 +434,25 @@ ruta('POST', '/api/feedback', ({ body, req }) => {
   db.prepare('INSERT INTO feedback (fecha, estrellas, comentario, mesa, cliente) VALUES (?,?,?,?,?)')
     .run(fecha, estrellas, comentario, mesa, cliente);
   return { ok: true, estrellas, fecha };
+});
+// el cliente saca su tarjeta con su celular y nombre; si ya la tenía (otro celular, borró datos) se le devuelve la misma
+ruta('POST', '/api/tarjeta', ({ body, req }) => {
+  limitarTarjeta(req, 10);
+  const tel = celular(body?.telefono) || fail(400, 'Escribe tu número de celular');
+  const nombre = texto(body?.nombre, 30).split(/\s+/)[0] || fail(400, 'Escribe tu nombre');
+  let c = db.prepare('SELECT * FROM clientes WHERE telefono = ?').get(tel);
+  if (!c) {
+    db.prepare('INSERT INTO clientes (telefono, nombre, token, creado) VALUES (?,?,?,?)').run(tel, nombre, randomBytes(16).toString('hex'), ahora());
+    c = db.prepare('SELECT * FROM clientes WHERE telefono = ?').get(tel);
+  }
+  return tarjetaDe(c);
+});
+ruta('GET', '/api/tarjeta/([a-f0-9]{32})', ({ p }) => tarjetaDe(db.prepare('SELECT * FROM clientes WHERE token = ?').get(p[1]) || fail(404, 'Tarjeta no encontrada')));
+// caja: buscar al cliente por celular o por el código del QR de su tarjeta
+ruta('GET', '/api/clientes', ({ u, q }) => {
+  requiere(u);
+  const c = buscarCliente(q.get('q') || '') || fail(404, 'No hay tarjeta con ese número');
+  return { ...tarjetaDe(c), id: c.id, telefono_completo: c.telefono };
 });
 ruta('GET', '/api/usuarios-login', () => db.prepare('SELECT usuario, nombre FROM usuarios WHERE activo = 1 ORDER BY rol, nombre').all());
 ruta('GET', '/api/sesion', ({ u }) => (requiere(u), u));
@@ -554,6 +631,7 @@ createServer(async (req, res) => {
       return res.end(JSON.stringify(out));
     }
     if (url.pathname === '/caja' || url.pathname === '/comanda' || url.pathname === '/comanda/') { res.writeHead(301, { Location: '/caja/' }); return res.end(); }
+    if (url.pathname === '/tarjeta' || url.pathname === '/tarjeta/') { res.writeHead(301, { Location: '/tarjeta.html' + url.search }); return res.end(); }
     if (url.pathname.startsWith('/caja/') && await estatico(res, ROOT_APP, url.pathname.slice(6))) return;
     if (!url.pathname.startsWith('/caja/') && await estatico(res, ROOT_MENU, url.pathname.slice(1))) return;
     res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); res.end('No encontrado');

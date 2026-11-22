@@ -1,8 +1,8 @@
 // Service worker del menú: abre rápido y sin señal. Precios siempre frescos cuando hay red.
-const VERSION = 'lacentral-menu-v52';
-const BASE = ['./', 'index.html', 'styles.css?v=41', 'app.js?v=33', 'menu.js?v=13', 'fuego.js?v=6', 'vendor/model-viewer.min.js',
+const VERSION = 'lacentral-menu-v61';
+const BASE = ['./', 'index.html', 'styles.css?v=42', 'app.js?v=35', 'menu.js?v=13', 'fuego.js?v=6', 'granos.js?v=5', 'vendor/model-viewer.min.js',
   'fonts/Utendo-Medium.ttf', 'fonts/Utendo-ExtraBold.ttf', 'fonts/Geist-VariableFont_wght.ttf', 'fonts/SpaceMono-Regular.ttf', 'fonts/SpaceMono-Bold.ttf',
-  'img/logo-horizontal.svg?v=3', 'img/spray-fondo.png', 'img/taza.svg', 'img/llama.svg?v=3', 'img/icono-corazon.svg', 'img/icono-fuego.svg', 'img/icono-rapido.svg', 'img/icono-cafe.svg'];
+  'img/logo-horizontal.svg?v=3', 'img/spray-fondo.png', 'img/taza.svg', 'img/llama.svg?v=3', 'img/icono-corazon.svg', 'img/icono-fuego.svg', 'img/icono-rapido.svg', 'img/icono-cafe.svg', 'tarjeta.html', 'tarjeta.css?v=2', 'tarjeta.js?v=1'];
 
 self.addEventListener('install', e => e.waitUntil(caches.open(VERSION).then(c => c.addAll(BASE)).then(() => self.skipWaiting())));
 self.addEventListener('activate', e => e.waitUntil(

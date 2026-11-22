@@ -1,10 +1,36 @@
-// Prueba de punta a punta de la API contra un servidor corriendo (node test.mjs [url]).
-// Usa los PIN de data/usuarios-iniciales.json. Córrelo contra una base temporal:
-//   LACENTRAL_DB=/tmp/prueba.db PORT=3999 node server.mjs  y luego  node test.mjs http://localhost:3999
-import { readFileSync } from 'node:fs';
+// Prueba de punta a punta de la API.  node test.mjs
+// Sin argumentos levanta SU PROPIO servidor con una base temporal (puerto 3999) y la borra al terminar:
+// nunca toca data/lacentral.db. Para probar otro servidor ya corriendo: node test.mjs http://host:puerto
+// Usa los PIN de data/usuarios-iniciales.json.
+import { readFileSync, rmSync } from 'node:fs';
+import { spawn } from 'node:child_process';
+import { once } from 'node:events';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import assert from 'node:assert/strict';
 
-const BASE = process.argv[2] || 'http://localhost:3000';
+let BASE = process.argv[2];
+let cerrar = async () => {};
+if (!BASE) {
+  const dbTmp = join(tmpdir(), `lacentral-prueba-${process.pid}.db`);
+  const srv = spawn(process.execPath, [new URL('./server.mjs', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')],
+    { env: { ...process.env, LACENTRAL_DB: dbTmp, PORT: '3999' }, stdio: 'ignore' });
+  // en Windows el archivo queda bloqueado hasta que el servidor termina: esperar y reintentar el borrado
+  cerrar = async () => {
+    if (srv.exitCode === null && srv.signalCode === null) { srv.kill(); await once(srv, 'exit'); }
+    for (let i = 0; i < 30; i++) {
+      try { for (const s of ['', '-wal', '-shm']) rmSync(dbTmp + s, { force: true }); return; }
+      catch { await new Promise(r => setTimeout(r, 100)); }
+    }
+  };
+  const fallo = async e => { console.error(e); await cerrar(); process.exit(1); };
+  process.on('uncaughtException', fallo);
+  process.on('unhandledRejection', fallo);
+  BASE = 'http://localhost:3999';
+  for (let i = 0; ; i++) {
+    try { await fetch(BASE + '/api/carta'); break; } catch { if (i > 50) throw new Error('El servidor de prueba no arrancó'); await new Promise(r => setTimeout(r, 100)); }
+  }
+}
 const { usuarios } = JSON.parse(readFileSync(new URL('./data/usuarios-iniciales.json', import.meta.url), 'utf8'));
 const pin = u => usuarios.find(x => x.usuario === u).pin;
 
@@ -91,15 +117,19 @@ await t('carta pública marca agotado cuando falta un insumo', async () => {
 });
 await t('carta trae secciones del menú con combo y modelo 3D', async () => {
   const d = (await anon('GET', '/carta')).data;
-  assert.deepEqual(d.secciones.map(s => s.titulo), ['choripan', 'bebidas']);
+  assert.deepEqual(d.secciones.map(s => s.titulo), ['café de día', 'choripan', 'fuego de noche', 'bebidas']);
+  // horario de cada bloque: lo de la parrilla solo de noche, café y horneados solo de día, bebidas siempre
+  const hor = Object.fromEntries(d.secciones.flatMap(s => s.bloques).map(b => [b.id, b.horario]));
+  assert.equal(hor.choripan, 'noche'); assert.equal(hor.parrilla, 'noche');
+  assert.equal(hor.cafes, 'dia'); assert.equal(hor.horneados, 'dia'); assert.equal(hor.cervezas, 'siempre');
   const chori = itemsCarta(d).find(p => p.id === 'choripan');
   assert.equal(chori.model, 'choripan');
   assert.deepEqual(chori.comboIncluye, ['+papa criolla', '+coca-cola zero 250ml']);
 });
 await t('dueño crea categoría y producto; aparece en la carta; cajero no puede', async () => {
   assert.equal((await caja('POST', '/productos', { nombre: 'X', categoria: 'choripan', precio: 1 })).status, 403);
-  assert.equal((await admin('POST', '/categorias', { nombre: 'Cafés', seccion: 'cafés', tipo: 'lista' })).status, 200);
-  const r = await admin('POST', '/productos', { nombre: 'Tinto <b>grande</b>', categoria: 'cafes', precio: 3000, descripcion: 'de la casa' });
+  assert.equal((await admin('POST', '/categorias', { nombre: 'Postres', seccion: 'postres', tipo: 'lista' })).status, 200);
+  const r = await admin('POST', '/productos', { nombre: 'Tinto <b>grande</b>', categoria: 'postres', precio: 3000, descripcion: 'de la casa' });
   assert.equal(r.status, 200, JSON.stringify(r.data));
   assert.equal(r.data.id, 'tinto-b-grande-b');
   const it = itemsCarta((await anon('GET', '/carta')).data).find(p => p.id === r.data.id);
@@ -160,6 +190,45 @@ await t('comandas requieren sesión; crear, editar ítems y cobrar con propina y
   assert.equal(activas.find(x => x.id === c1.data.id).estado, 'cobrado');
   await admin('POST', `/ventas/${v.data.id}/anular`);
 });
+await t('tarjeta de sellos: 1 sello por compra, premio a los 8 y anular devuelve', async () => {
+  // el cliente saca la tarjeta (sin sesión); con el mismo celular recupera la misma
+  assert.equal((await anon('POST', '/tarjeta', { nombre: 'Laura', telefono: '12' })).status, 400);
+  const tj = await anon('POST', '/tarjeta', { nombre: 'Laura Gómez', telefono: '+57 310 555 4521' });
+  assert.equal(tj.status, 200);
+  assert.equal(tj.data.nombre, 'Laura'); assert.equal(tj.data.sellos, 0); assert.equal(tj.data.meta, 8);
+  assert.equal(tj.data.telefono, '310 *** 4521');
+  assert.equal((await anon('POST', '/tarjeta', { nombre: 'Otra', telefono: '3105554521' })).data.token, tj.data.token);
+  assert.equal((await anon('GET', '/tarjeta/' + tj.data.token)).data.sellos, 0);
+  // la caja la busca por celular (requiere sesión)
+  assert.equal((await anon('GET', '/clientes?q=3105554521')).status, 401);
+  assert.equal((await caja('GET', '/clientes?q=3105554521')).data.token, tj.data.token);
+  assert.equal((await caja('GET', '/clientes?q=3000000000')).status, 404);
+  const vender = extra => caja('POST', '/ventas', { items: [{ producto_id: 'aguila', cantidad: 1 }], pago: 'nequi', cliente: '3105554521', ...extra });
+  // sin tarjeta completa no hay premio
+  assert.equal((await vender({ premio: 'descuento' })).status, 400);
+  const ventas = [];
+  for (let i = 0; i < 8; i++) { const v = await vender(); assert.equal(v.status, 200); ventas.push(v.data); }
+  assert.equal(ventas[7].tarjeta.sellos, 8);
+  assert.equal((await anon('GET', '/tarjeta/' + tj.data.token)).data.premio, true);
+  // café gratis: necesita un café en la cuenta
+  assert.equal((await vender({ premio: 'cafe' })).status, 400);
+  await admin('PUT', '/productos/cafe', { precio: 4000 });
+  const vc = await caja('POST', '/ventas', { items: [{ producto_id: 'cafe', cantidad: 2 }, { producto_id: 'aguila', cantidad: 1 }], pago: 'efectivo', cliente: tj.data.token, premio: 'cafe' });
+  assert.equal(vc.status, 200);
+  assert.equal(vc.data.descuento, 4000); assert.equal(vc.data.total, vc.data.subtotal - 4000);
+  assert.equal(vc.data.tarjeta.sellos, 1);   // 8 - 8 del canje + 1 de esta compra
+  // anular la venta del canje devuelve el premio
+  await admin('POST', `/ventas/${vc.data.id}/anular`);
+  assert.equal((await caja('GET', '/clientes?q=3105554521')).data.sellos, 8);
+  // descuento del 10%
+  const vd = await vender({ premio: 'descuento' });
+  assert.equal(vd.data.descuento, Math.round(vd.data.subtotal * 0.1));
+  assert.equal(vd.data.tarjeta.sellos, 1);
+  for (const v of [...ventas, vd.data]) await admin('POST', `/ventas/${v.id}/anular`);
+  assert.equal((await caja('GET', '/clientes?q=3105554521')).data.sellos, 0);
+  // venta con cliente inexistente: error, no se cobra a ciegas
+  assert.equal((await caja('POST', '/ventas', { items: [{ producto_id: 'aguila', cantidad: 1 }], pago: 'nequi', cliente: '3000000000' })).status, 400);
+});
 await t('petición desde otro origen es bloqueada', async () => {
   const r = await fetch(BASE + '/api/logout', { method: 'POST', headers: { origin: 'https://malicioso.example' } });
   assert.equal(r.status, 403);
@@ -169,3 +238,5 @@ await t('no se puede leer fuera de las carpetas públicas', async () => {
   assert.notEqual(r.status, 200);
 });
 console.log(`\n${ok} pruebas OK`);
+await cerrar();   // apaga el servidor de prueba y borra su base temporal
+process.exit(0);

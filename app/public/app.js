@@ -480,6 +480,7 @@ function generarTicketHtml(venta) {
         }).join('')}
       </div>
 
+      ${venta.descuento ? fila(venta.premio === 'cafe' ? 'PREMIO · CAFÉ GRATIS' : 'PREMIO · DESCUENTO', '-' + cop(venta.descuento)) : ''}
       ${venta.propina ? fila('PROPINA VOLUNTARIA', cop(venta.propina)) : ''}
       ${fila(esPrecuenta ? 'SUBTOTAL' : 'TOTAL', cop(venta.total), 'tk-total')}
       ${esPrecuenta
@@ -492,6 +493,11 @@ function generarTicketHtml(venta) {
         ${fila(fecha, hora)}
       </div>
 
+      ${venta.tarjeta ? `<div class="tk-sellos">
+        <div>TARJETA DE SELLOS · ${esc(String(venta.tarjeta.nombre).toUpperCase())}</div>
+        <div class="tk-granos">${Array.from({ length: venta.tarjeta.meta }, (_, i) => i < Math.min(venta.tarjeta.sellos, venta.tarjeta.meta) ? '●' : '○').join(' ')}</div>
+        <div>${venta.tarjeta.sellos >= venta.tarjeta.meta ? '¡PREMIO EN TU PRÓXIMA COMPRA!' : `${venta.tarjeta.sellos} DE ${venta.tarjeta.meta} · TE FALTAN ${venta.tarjeta.meta - venta.tarjeta.sellos}`}</div>
+      </div>` : ''}
       <div class="tk-gracias">${noche ? 'GRACIAS POR VENIR AL FUEGO' : 'GRACIAS POR TU VISITA'}</div>
       <div class="tk-pie">@LACENTRAL.TUNJA</div>
       <div class="tk-pie">COMPROBANTE DE VENTA · NO ES FACTURA ELECTRÓNICA</div>
@@ -969,8 +975,13 @@ async function cobrar() {
   if (!baseTotal) return;
   const propina10 = Math.round((baseTotal * 0.10) / 100) * 100;
   let propina = S.propina || 0;
-  let total = baseTotal + propina;
   let pagoSelec = S.pago || 'efectivo';
+  // tarjeta de sellos: cliente (por celular) y premio que escoja al completar 8 sellos
+  let cliente = null, premio = null, descuento = 0;
+  const cafesCarrito = S.carrito.filter(l => S.productos.find(x => x.id === l.id)?.categoria === 'cafes');
+  const precioCafe = cafesCarrito.length ? Math.max(...cafesCarrito.map(precioDe)) : 0;
+  const totalAhora = () => baseTotal - descuento + propina;
+  let total = totalAhora();
 
   abrirModal(`cobrar · ${esc(S.mesa)}`, `
     <div class="cobro-modal">
@@ -985,6 +996,14 @@ async function cobrar() {
           <button type="button" data-prop="${propina10}" class="${propina === propina10 ? 'activo' : ''}">+10% (${cop(propina10)})</button>
         </div>
       </label>
+      <div class="campo sellos-campo">
+        <span>Tarjeta de sellos (celular del cliente)</span>
+        <div class="sellos-buscar">
+          <input id="modal-cliente" type="tel" inputmode="numeric" placeholder="310 555 4521" autocomplete="off">
+          <button type="button" class="btn" id="btn-cliente">buscar</button>
+        </div>
+        <div id="sellos-info" class="sellos-info" aria-live="polite"></div>
+      </div>
       <div style="display:flex; justify-content:space-between; align-items:baseline; padding:10px 0; border-top:2px solid var(--soft); margin:8px 0;">
         <span style="font-weight:800; font-size:18px;">TOTAL A COBRAR:</span>
         <b id="modal-tot-val" style="font-size:28px; color:#000;">${cop(total)}</b>
@@ -1003,7 +1022,8 @@ async function cobrar() {
       </div>
     </div>
   `, async () => {
-    const finalTotal = baseTotal + propina;
+    const finalTotal = totalAhora();
+    if ($('#modal-cliente')?.value.trim() && !cliente) throw new Error('Busca la tarjeta del cliente o borra el celular');
     const rawRec = $('#modal-recibido')?.value.replace(/\D/g, '') || '';
     const finalRecibido = pagoSelec === 'efectivo' ? (rawRec ? Number(rawRec) : finalTotal) : null;
     if (pagoSelec === 'efectivo' && finalRecibido < finalTotal) {
@@ -1015,7 +1035,8 @@ async function cobrar() {
     });
     const r = await api('POST', '/ventas', {
       items: S.carrito.map(l => ({ producto_id: l.id, variante: l.variante, cantidad: l.cantidad })),
-      pago: pagoSelec, recibido: finalRecibido, mesa: S.mesa, propina, comanda_id: S.comanda_id
+      pago: pagoSelec, recibido: finalRecibido, mesa: S.mesa, propina, comanda_id: S.comanda_id,
+      cliente: cliente?.token, premio
     });
     r.items = itemsVenta; r.mesa = S.mesa; r.propina = propina; r.total = finalTotal;
     S.ultimoTicket = r; S.carrito = []; S.recibido = ''; S.comanda_id = null; S.propina = 0;
@@ -1026,6 +1047,7 @@ async function cobrar() {
           <span class="ring-big">✓</span>
           <p class="big" style="font-size:32px; font-weight:800; margin:8px 0;">${cop(r.total)}</p>
           <p class="muted">${r.mesa || 'Caja'} · ${PAGOS[pagoSelec]}${r.cambio != null ? ` · cambio <b>${cop(r.cambio)}</b>` : ''}</p>
+          ${r.tarjeta ? `<p class="sellos-ok">${esc(r.tarjeta.nombre)} · ${r.tarjeta.sellos >= r.tarjeta.meta ? '¡completó la tarjeta! premio en la próxima compra' : `${r.tarjeta.sellos} de ${r.tarjeta.meta} sellos`}${r.premio ? ' · premio canjeado' : ''}</p>` : ''}
           <div style="display:flex; gap:10px; justify-content:center; margin-top:20px;">
             <button type="button" class="btn btn-negro" id="btn-print-tkt">🖨️ imprimir ticket</button>
             <button type="button" class="btn" id="btn-wa-tkt">📱 whatsapp</button>
@@ -1039,10 +1061,44 @@ async function cobrar() {
   $$('[data-prop]').forEach(b => b.onclick = () => {
     propina = Number(b.dataset.prop);
     $$('[data-prop]').forEach(x => x.classList.toggle('activo', x === b));
-    total = baseTotal + propina;
-    $('#modal-tot-val').textContent = cop(total);
-    actCambio();
+    recalcular();
   });
+  const recalcular = () => {
+    descuento = premio === 'cafe' ? precioCafe : premio === 'descuento' ? Math.round(baseTotal * (cliente?.descuento || 10) / 100) : 0;
+    total = totalAhora();
+    $('#modal-tot-val').textContent = cop(total) + (descuento ? ` (−${cop(descuento)})` : '');
+    const recIn = $('#modal-recibido');
+    if (recIn) recIn.placeholder = total;
+    actCambio();
+  };
+  const pintarCliente = () => {
+    const box = $('#sellos-info');
+    if (!cliente) { box.innerHTML = ''; return; }
+    const puestos = Math.min(cliente.sellos, cliente.meta);
+    const bolitas = Array.from({ length: cliente.meta }, (_, i) => `<i class="${i < puestos ? 'on' : ''}"></i>`).join('');
+    box.innerHTML = `<div class="sellos-fila"><b>${esc(cliente.nombre)}</b><span class="sellos-bolitas">${bolitas}</span><span>${puestos}/${cliente.meta}</span></div>
+      ${cliente.premio ? `<p class="sellos-premio">¡Tiene premio! ¿Qué escoge?</p>
+        <div class="desc-grid">
+          <button type="button" data-premio="cafe" class="${premio === 'cafe' ? 'activo' : ''}">café gratis${precioCafe ? ` (−${cop(precioCafe)})` : ''}</button>
+          <button type="button" data-premio="descuento" class="${premio === 'descuento' ? 'activo' : ''}">${cliente.descuento}% (−${cop(Math.round(baseTotal * cliente.descuento / 100))})</button>
+          <button type="button" data-premio="" class="${!premio ? 'activo' : ''}">después</button>
+        </div>` : `<p class="muted">Esta compra suma 1 sello.</p>`}`;
+    box.querySelectorAll('[data-premio]').forEach(b => b.onclick = () => {
+      if (b.dataset.premio === 'cafe' && !precioCafe) return toast('Agrega a la cuenta el café del premio', 'warn');
+      premio = b.dataset.premio || null; pintarCliente(); recalcular();
+    });
+  };
+  const buscarCliente = async () => {
+    const q = $('#modal-cliente').value.trim();
+    cliente = null; premio = null; pintarCliente(); recalcular();
+    if (!q) return;
+    try { cliente = await api('GET', '/clientes?q=' + encodeURIComponent(q)); }
+    catch (err) { $('#sellos-info').innerHTML = `<p class="muted">${esc(err.message)}. El cliente la saca en el menú → tarjeta de sellos.</p>`; return; }
+    pintarCliente();
+  };
+  $('#btn-cliente').onclick = buscarCliente;
+  $('#modal-cliente').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); buscarCliente(); } };
+  $('#modal-cliente').oninput = () => { if (cliente) { cliente = null; premio = null; pintarCliente(); recalcular(); } };
   $$('[data-mp]').forEach(b => b.onclick = () => {
     pagoSelec = b.dataset.mp; S.pago = pagoSelec;
     $$('[data-mp]').forEach(x => x.setAttribute('aria-checked', x === b));
@@ -1050,7 +1106,7 @@ async function cobrar() {
   });
   const actCambio = () => {
     const val = Number($('#modal-recibido')?.value.replace(/\D/g, '')) || 0;
-    const diff = val - (baseTotal + propina);
+    const diff = val - totalAhora();
     const cb = $('#modal-cambio');
     if (!cb) return;
     if (val) {

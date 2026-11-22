@@ -183,6 +183,67 @@ export function migrar() {
         .run(p.id, desc[p.id] ?? null, p.id);
     }
   }
+  migrarHorarios();
+  migrarFidelizacion();
+}
+
+// ---------- tarjeta de sellos: 1 sello por compra, 8 sellos = premio (café gratis o descuento) ----------
+// el saldo de un cliente es la suma de sus movimientos en 'sellos' (+1 por compra, -8 al canjear);
+// así anular una venta solo es borrar sus movimientos.
+function migrarFidelizacion() {
+  db.exec(`CREATE TABLE IF NOT EXISTS clientes (
+    id INTEGER PRIMARY KEY, telefono TEXT UNIQUE NOT NULL, nombre TEXT NOT NULL,
+    token TEXT UNIQUE NOT NULL, creado TEXT NOT NULL)`);
+  db.exec(`CREATE TABLE IF NOT EXISTS sellos (
+    id INTEGER PRIMARY KEY, cliente_id INTEGER NOT NULL REFERENCES clientes(id),
+    venta_id INTEGER REFERENCES ventas(id), fecha TEXT NOT NULL, cantidad INTEGER NOT NULL,
+    tipo TEXT NOT NULL CHECK (tipo IN ('sello','canje')))`);
+  db.exec('CREATE INDEX IF NOT EXISTS ix_sellos_cliente ON sellos(cliente_id)');
+  const vcols = db.prepare('PRAGMA table_info(ventas)').all().map(c => c.name);
+  if (!vcols.includes('cliente_id')) db.exec('ALTER TABLE ventas ADD COLUMN cliente_id INTEGER REFERENCES clientes(id)');
+  if (!vcols.includes('descuento')) db.exec('ALTER TABLE ventas ADD COLUMN descuento INTEGER NOT NULL DEFAULT 0');
+  if (!vcols.includes('premio')) db.exec('ALTER TABLE ventas ADD COLUMN premio TEXT');
+}
+
+// ---------- carta de día / carta de noche (tarjetas "café de día" y "fuego de noche") ----------
+// horario de cada categoría: 'dia' = solo de día, 'noche' = solo en la parrilla (jue–sáb 4–10 pm), 'siempre' = ambas.
+// En la parrilla se muestra TODO; de día se ocultan las de 'noche'.
+// Los productos nuevos entran con precio 0 (= "precio por confirmar"): se editan desde la caja.
+function migrarHorarios() {
+  const ccols = db.prepare('PRAGMA table_info(categorias)').all().map(c => c.name);
+  if (ccols.includes('horario')) return;               // ya migrado: no tocar lo que el dueño haya cambiado
+  db.exec(`ALTER TABLE categorias ADD COLUMN horario TEXT NOT NULL DEFAULT 'siempre'`);
+  db.prepare(`UPDATE categorias SET horario = 'noche' WHERE id IN ('choripan', 'adiciones')`).run();
+  const ic = db.prepare('INSERT OR IGNORE INTO categorias (id, nombre, seccion, tipo, orden, horario) VALUES (?,?,?,?,?,?)');
+  const ip = db.prepare('INSERT OR IGNORE INTO productos (id, nombre, categoria, precio, orden, descripcion) VALUES (?,?,?,?,?,?)');
+  const tx = [
+    // café de día: van primero en la carta
+    ['cafes', 'Café', 'café de día', 'lista', -20, 'dia', [
+      ['cafe', 'Café', 'Café de origen.'],
+    ]],
+    ['horneados', 'Horneados', 'café de día', 'lista', -19, 'dia', [
+      ['empanadas-horneadas', 'Empanadas horneadas', ''],
+      ['pastel-pollo', 'Pastel de pollo', ''],
+      ['pastel-hawaiano', 'Pastel hawaiano', ''],
+      ['torta-vino', 'Torta de vino', ''],
+      ['mantecada', 'Mantecada', ''],
+    ]],
+    // fuego de noche: junto al choripán
+    ['parrilla', 'De la parrilla', 'fuego de noche', 'lista', 1, 'noche', [
+      ['alitas', 'Alitas', 'Lulo, maracuyá o BBQ.'],
+      ['costillas-bbq', 'Costillas BBQ', ''],
+      ['sandwich', 'Sándwich', ''],
+      ['nachos', 'Nachos', ''],
+    ]],
+  ];
+  db.exec('BEGIN');
+  try {
+    for (const [id, nombre, seccion, tipo, orden, horario, prods] of tx) {
+      ic.run(id, nombre, seccion, tipo, orden, horario);
+      prods.forEach(([pid, pn, pd], i) => ip.run(pid, pn, id, 0, i, pd || null));
+    }
+    db.exec('COMMIT');
+  } catch (e) { db.exec('ROLLBACK'); throw e; }
 }
 
 // ---------- copia de seguridad diaria automática (data/respaldos, se guardan 14) ----------

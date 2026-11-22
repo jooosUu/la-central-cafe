@@ -475,3 +475,18 @@ dialog::backdrop { background: rgba(0, 0, 0, .55); }
   body[data-print="qr"] .qr-grid { grid-template-columns: repeat(3, 1fr); gap: 8mm; }
 }
 
+
+/* ---------- tarjeta de sellos en el cobro ---------- */
+.sellos-campo { margin: 4px 0 2px; }
+.sellos-buscar { display: flex; gap: var(--s2); }
+.sellos-buscar input { flex: 1; min-width: 0; }
+.sellos-info:empty { display: none; }
+.sellos-info { margin-top: 6px; font-size: 14px; }
+.sellos-fila { display: flex; align-items: center; gap: 10px; }
+.sellos-bolitas { display: inline-flex; gap: 4px; flex: 1; }
+.sellos-bolitas i { width: 11px; height: 15px; border-radius: 50%; border: 2px solid var(--ink); }
+.sellos-bolitas i.on { background: var(--ink); }
+.sellos-premio { font-weight: 800; margin: 8px 0 0; }
+.sellos-ok { margin-top: 10px; font-weight: 800; }
+.tk-sellos { margin: 10px 0 4px; padding: 8px 0; border-top: 1px dashed #000; border-bottom: 1px dashed #000; text-align: center; line-height: 1.5; }
+.tk-granos { font-size: 1.35em; letter-spacing: .05em; }

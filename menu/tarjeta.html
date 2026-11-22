@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#FFFFFF">
+<title>tarjeta de sellos · la central · tunja</title>
+<link rel="icon" href="img/taza.svg">
+<link rel="apple-touch-icon" href="img/taza.svg">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="la central">
+<link rel="preload" href="fonts/Utendo-ExtraBold.ttf" as="font" type="font/ttf" crossorigin>
+<script>
+/* mismo horario que el menú: café (B/N) de día; parrilla jue–sáb 4–10 pm. Prueba: ?modo=parrilla | ?modo=cafe */
+(function () {
+  var forzado = new URLSearchParams(location.search).get('modo');
+  function modo() {
+    if (forzado === 'parrilla' || forzado === 'cafe') return forzado;
+    var d = new Date(), h = d.getHours();
+    return ([4, 5, 6].indexOf(d.getDay()) !== -1 && h >= 16 && h < 22) ? 'parrilla' : 'cafe';
+  }
+  function aplicar() {
+    var m = modo(), html = document.documentElement;
+    if (html.dataset.modo === m) return;
+    html.dataset.modo = m;
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.content = m === 'parrilla' ? '#0D0B0A' : '#FFFFFF';
+  }
+  aplicar();
+  setInterval(aplicar, 60000);
+})();
+</script>
+<link rel="stylesheet" href="styles.css?v=42">
+<link rel="stylesheet" href="tarjeta.css?v=2">
+</head>
+<body class="pag-tarjeta">
+<div class="ambiente" aria-hidden="true"><i></i><i></i><i></i></div>
+
+<header class="top">
+  <a class="logo" id="logo" href="./" aria-label="la central · tunja — volver al menú"></a>
+  <a class="tj-volver" href="./">← menú</a>
+</header>
+
+<section class="intro tj-intro">
+  <canvas class="fuego" data-alto="0.55" aria-hidden="true"></canvas>
+  <p class="intro-t" id="txt-intro-t">sellos</p>
+  <div class="tj-noche" aria-hidden="true">
+    <p class="noche-kicker">la central · tunja · tarjeta de sellos</p>
+    <p class="tj-noche-t">sellos</p>
+  </div>
+  <p class="tj-regla" id="tj-regla">cada compra es un sello · 8 sellos = café gratis o 10% de descuento</p>
+</section>
+
+<main class="tj">
+  <!-- sin tarjeta: el cliente la saca con su nombre y celular -->
+  <form class="tj-form" id="tj-form" hidden novalidate>
+    <label>tu nombre<input name="nombre" autocomplete="given-name" maxlength="30" placeholder="Laura" required></label>
+    <label>tu celular<input name="telefono" type="tel" inputmode="numeric" autocomplete="tel-national" maxlength="14" placeholder="310 555 4521" required></label>
+    <p class="tj-error" id="tj-error" role="alert"></p>
+    <button type="submit" class="tj-btn">sacar mi tarjeta</button>
+    <p class="tj-nota">si ya tenías tarjeta, escribe el mismo celular y recuperas tus sellos.</p>
+  </form>
+
+  <!-- la tarjeta -->
+  <article class="tj-card" id="tj-card" hidden aria-live="polite">
+    <div class="tj-card-top">
+      <span class="tj-mono">tarjeta de sellos</span>
+      <span class="tj-mono" id="tj-tel"></span>
+    </div>
+    <h1 class="tj-nombre" id="tj-nombre"></h1>
+    <ol class="tj-sellos" id="tj-sellos" aria-label="sellos"></ol>
+    <p class="tj-estado" id="tj-estado"></p>
+    <div class="tj-premio" id="tj-premio" hidden>
+      <p class="tj-premio-t">¡tienes premio!</p>
+      <p>pídelo en caja: <b>café gratis</b> o <b id="tj-desc">10% de descuento</b>, lo que tú escojas.</p>
+    </div>
+    <div class="tj-card-pie">
+      <span class="tj-mono">muéstrala en caja o di tu celular</span>
+    </div>
+  </article>
+
+  <div class="tj-acciones" id="tj-acciones" hidden>
+    <p class="tj-ios" id="tj-ios" hidden>guárdala: toca <b>compartir</b> y luego <b>agregar a inicio</b>.</p>
+    <ul class="tj-hist" id="tj-hist" aria-label="últimos movimientos"></ul>
+    <button type="button" class="tj-link" id="tj-salir">no soy yo · usar otro celular</button>
+  </div>
+</main>
+
+<footer class="foot tj-foot">
+  <canvas class="fuego" data-alto="1.05" aria-hidden="true"></canvas>
+  <div class="foot-logo" id="foot-logo" aria-hidden="true"></div>
+</footer>
+
+<script src="granos.js?v=5" defer></script>
+<script src="fuego.js?v=6" defer></script>
+<script src="tarjeta.js?v=1" defer></script>
+</body>
+</html>
