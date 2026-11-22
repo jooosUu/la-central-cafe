@@ -26,17 +26,12 @@
       fuego += .10 * fbm(vec2(p.x * 9., t * 3.)) * (1. - y);   // parpadeo fino
       fuego += .32 * pow(max(1. - y * 1.6, 0.), 3.);            // brasa constante en la base
       float k = clamp(fuego * 1.25, 0., 1.);
-      // EFECTO SPRAY: cada píxel tiene un umbral de ruido fijo; los tonos no se degradan,
-      // se forman con puntitos (como pintura en aerosol) y los bordes se deshacen en gotas.
-      vec3 p3 = fract(vec3(floor(gl_FragCoord.xyx)) * .1031);      // ruido por píxel sin rayas (sin sin())
-      p3 += dot(p3, p3.yzx + 33.33);
-      float g = fract((p3.x + p3.y) * p3.z) - .5;
-      float s = k + g * .5 * smoothstep(.0, .18, k);               // donde no hay fuego, negro limpio
+      // FUEGO DESENFOCADO: los colores se funden entre sí (sin puntitos ni escalones), como visto a través del calor.
       vec3 c = vec3(.047, .039, .035);                              // negro #0C0A09
-      c = mix(c, vec3(.36, .06, .03), step(.14, s));               // brasa
-      c = mix(c, vec3(.89, .25, .12), step(.36, s));               // rojo La Central #E4411F
-      c = mix(c, vec3(1., .56, .16), step(.62, s));                // naranja
-      c = mix(c, vec3(.95, .91, .84), step(.86, s));               // crema (como la tinta de la marca)
+      c = mix(c, vec3(.36, .06, .03), smoothstep(.04, .30, k));    // brasa
+      c = mix(c, vec3(.89, .25, .12), smoothstep(.24, .52, k));    // rojo La Central #E4411F
+      c = mix(c, vec3(1., .56, .16), smoothstep(.50, .78, k));     // naranja
+      c = mix(c, vec3(.98, .90, .74), smoothstep(.78, 1., k));     // centro claro
       gl_FragColor = vec4(c, 1.);
     }`;
 
@@ -61,7 +56,7 @@
     const alto = parseFloat(canvas.dataset.alto || '0.8');
 
     // resolución reducida: el fuego es suave, no necesita píxeles finos (y ahorra batería)
-    const ESCALA = 0.5;
+    const ESCALA = 0.35;
     const medir = () => {
       const w = Math.max(1, Math.round(canvas.clientWidth * ESCALA)), hh = Math.max(1, Math.round(canvas.clientHeight * ESCALA));
       if (canvas.width !== w || canvas.height !== hh) { canvas.width = w; canvas.height = hh; gl.viewport(0, 0, w, hh); }

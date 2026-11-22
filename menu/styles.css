@@ -686,7 +686,7 @@ html[data-modo="parrilla"] body { overflow-x: visible; }
   html[data-modo="parrilla"] .intro { min-height: min(74svh, 640px); }
 }
 /* el fuego se dibuja a media resolución: los puntos de spray quedan nítidos, no borrosos */
-html[data-modo="parrilla"] canvas.fuego { image-rendering: pixelated; }
+html[data-modo="parrilla"] canvas.fuego { filter: blur(5px); }
 
 /* pie de lado a lado (como la portada) */
 .foot { margin-inline: calc(50% - 50vw); padding-inline: calc(50vw - 50% + var(--pad)); border-radius: 0; }
@@ -787,3 +787,24 @@ html[data-modo="parrilla"] body { background: transparent; }
 /* la portada tapa el video y se funde en negro hacia abajo */
 html[data-modo="parrilla"] .intro { background-color: #0C0A09; box-shadow: 0 80px 70px -10px #0C0A09; }
 @media (prefers-reduced-motion: reduce) { .fondo-video video { transition: none; } }
+
+/* =================================================================
+   NOCHE: toda la letra es Utendo (la de la palabra "parrilla") y todo el texto va en blanco,
+   precios incluidos. Solo la frase "café de día, fuego de noche" conserva la serif en cursiva.
+   ================================================================= */
+html[data-modo="parrilla"] {
+  --ink: #FFFFFF; --mute: #FFFFFF;
+  --serif: Utendo, Geist, system-ui, sans-serif;
+  --mono: Utendo, Geist, system-ui, sans-serif;
+}
+html[data-modo="parrilla"] body *:not(.noche-tag) { font-style: normal; }
+html[data-modo="parrilla"] .noche-tag { font-family: "Bodoni Moda", "Bodoni 72", "Bodoni MT", Didot, "Playfair Display", Georgia, serif; font-style: italic; }
+html[data-modo="parrilla"] .cat-t,
+html[data-modo="parrilla"] .cart-head h2 { font-weight: 800; text-transform: lowercase; letter-spacing: -.045em; transform: none; }
+html[data-modo="parrilla"] .precios2 b,
+html[data-modo="parrilla"] .pre,
+html[data-modo="parrilla"] .cart-item-price,
+html[data-modo="parrilla"] .cart-total-bar b,
+html[data-modo="parrilla"] .cart-total-badge { color: #FFFFFF; font-weight: 800; }
+html[data-modo="parrilla"] .cart-campo input::placeholder,
+html[data-modo="parrilla"] .menu-search-bar input::placeholder { color: rgba(255, 255, 255, .6); }
