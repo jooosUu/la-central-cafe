@@ -35,10 +35,11 @@
     const estilo = getComputedStyle(texto);
     const r = texto.getBoundingClientRect();
     dpr = Math.min(devicePixelRatio || 1, 2);
-    W = Math.max(1, Math.round(r.width + parseFloat(estilo.fontSize) * 0.3)); H = Math.max(1, Math.round(r.height * 1.5));   // margen: la tilde y la última letra se salen de la caja del texto
+    const fs = parseFloat(estilo.fontSize), pad = Math.round(fs * 0.15);   // margen a los dos lados: la "m" y la tilde se salen de la caja del texto
+    W = Math.max(1, Math.round(r.width + pad * 2)); H = Math.max(1, Math.round(r.height * 1.5));
     cv.width = W * dpr; cv.height = H * dpr;
     cv.style.width = W + 'px'; cv.style.height = H + 'px';
-    cv.style.left = texto.offsetLeft + 'px';
+    cv.style.left = (texto.offsetLeft - pad) + 'px';
     cv.style.top = (texto.offsetTop - (H - r.height) / 2) + 'px';
     document.documentElement.classList.add('granos-on');
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -50,12 +51,14 @@
     o.fillStyle = '#000';
     o.font = `${estilo.fontWeight} ${estilo.fontSize} ${estilo.fontFamily}`;
     o.textBaseline = 'alphabetic';
+    if ('letterSpacing' in o) o.letterSpacing = estilo.letterSpacing;   // mismo apretado de letras que el texto real
     const m = o.measureText(texto.textContent);
     const base = (H + m.actualBoundingBoxAscent - m.actualBoundingBoxDescent) / 2;
-    o.fillText(texto.textContent, -parseFloat(estilo.fontSize) * 0.04, base);
+    o.textAlign = 'center';
+    o.fillText(texto.textContent, W / 2, base);
     const datos = o.getImageData(0, 0, W, H).data;
 
-    const tam = Math.max(5, Math.round(parseFloat(estilo.fontSize) / 17));   // tamaño del grano según la letra
+    const tam = Math.max(4, Math.round(parseFloat(estilo.fontSize) / 21));   // granos más chicos: los trazos finos (la f) se leen   // tamaño del grano según la letra
     hacerSprite(tam);
     const paso = tam * 1.18;
     const viejos = granos;

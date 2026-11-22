@@ -519,7 +519,7 @@ function compartirTicketWhatsApp(venta) {
   const d = parseFecha(venta.fecha);
   const fechaStr = d.toLocaleDateString('es-CO') + ' ' + d.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
   const items = venta.items || [];
-  let txt = `*🧾 TICKET DE COMPRA - LA CENTRAL · TUNJA*\n`;
+  let txt = `*TICKET DE COMPRA - LA CENTRAL · TUNJA*\n`;
   txt += `*Ticket:* #${venta.id} | *${venta.mesa || 'Caja'}*\n`;
   txt += `*Fecha:* ${fechaStr}\n`;
   txt += `--------------------------------\n`;
@@ -530,10 +530,10 @@ function compartirTicketWhatsApp(venta) {
   if (venta.propina) txt += `*Propina voluntaria:* ${cop(venta.propina)}\n`;
   txt += `*TOTAL:* ${cop(venta.total)} (${String(venta.pago || '').toUpperCase()})\n`;
   if (venta.cambio != null) txt += `*Cambio entregado:* ${cop(venta.cambio)}\n`;
-  txt += `\n¡Gracias por tu compra en La Central! ☕\n\n`;
-  txt += `📍 *Google Maps:* https://www.google.com/maps/place/La+Central+Caf%C3%A9/@5.5591249,-73.3519444,17z/data=!3m1!4b1!4m6!3m5!1s0x8e6a7db7cf35b097:0xa33f85c90770b3aa!8m2!3d5.5591249!4d-73.3493695!16s%2Fg%2F11nw2z8k38\n`;
-  txt += `📸 *Instagram:* https://www.instagram.com/lacentral.tunja/\n`;
-  txt += `⭐ ¿Cómo estuvo tu café? ¡Déjanos tu reseña en Google! ✨`;
+  txt += `\n¡Gracias por tu compra en La Central! \n\n`;
+  txt += `*Google Maps:* https://www.google.com/maps/place/La+Central+Caf%C3%A9/@5.5591249,-73.3519444,17z/data=!3m1!4b1!4m6!3m5!1s0x8e6a7db7cf35b097:0xa33f85c90770b3aa!8m2!3d5.5591249!4d-73.3493695!16s%2Fg%2F11nw2z8k38\n`;
+  txt += `*Instagram:* https://www.instagram.com/lacentral.tunja/\n`;
+  txt += `¿Cómo estuvo tu café? ¡Déjanos tu reseña en Google! `;
   window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(txt)}`, '_blank');
 }
 
@@ -660,7 +660,7 @@ setInterval(async () => {
     const nPend = cs.filter(c => c.estado === 'pendiente').length;
     if (pollInicializado && nPend > nPendientesPrev) {
       sonarTimbre();
-      toast('🔔 ¡Nueva comanda recibida en cocina!', 'warn');
+      toast('¡Nueva comanda recibida en cocina!', 'warn');
     }
     pollInicializado = true;
     nPendientesPrev = nPend;
@@ -675,7 +675,7 @@ window.addEventListener('storage', e => {
   if (e.key === 'lc_comanda_ping' || e.key === 'lc_demo_store') {
     cargar().then(() => {
       sonarTimbre();
-      toast('🔔 ¡Nueva orden recibida desde el menú!', 'warn');
+      toast('¡Nueva orden recibida desde el menú!', 'warn');
       if (location.hash === '#cocina') renderCocina();
       if (location.hash === '#mesas') renderMesas();
     }).catch(() => {});
@@ -864,7 +864,7 @@ function renderMesas() {
           -----------------------------<br>
           <b>TOTAL: ${cop(c.total)}</b>
         </div>
-      </div>`, () => imprimirTicket(ticketData), { ok: '🖨️ imprimir pre-cuenta' });
+      </div>`, () => imprimirTicket(ticketData), { ok: 'imprimir pre-cuenta' });
   });
   $$('[data-cobrar-m]').forEach(b => b.onclick = () => {
     const c = (S.comandas || []).find(x => x.id === Number(b.dataset.cobrarM));
@@ -893,7 +893,7 @@ function renderCocina() {
   <section class="pagina">
     <header class="p-head">
       <div><h1>cocina</h1><p class="muted">Monitor de pedidos en tiempo real (KDS)</p></div>
-      <div class="p-acc"><button class="btn btn-sm" id="btn-timbre">🔔 probar timbre</button></div>
+      <div class="p-acc"><button class="btn btn-sm" id="btn-timbre">probar timbre</button></div>
     </header>
     <hr class="regla">
     <div class="cocina-head-info">
@@ -911,7 +911,7 @@ function renderCocina() {
             <span class="comanda-mesa">${esc(c.mesa)}</span>
             <span class="comanda-time">${tiempoRelativo(c.fecha)}</span>
           </div>
-          ${c.notas ? `<div class="comanda-nota">📝 "${esc(c.notas)}"</div>` : ''}
+          ${c.notas ? `<div class="comanda-nota">"${esc(c.notas)}"</div>` : ''}
           <ul class="comanda-items-list">
             ${(c.items || []).map(it => `
               <li><span><b class="it-cant">${it.cantidad}x</b> <span class="it-nom">${esc(it.nombre || it.id)}</span></span></li>
@@ -919,11 +919,11 @@ function renderCocina() {
           </ul>
           <div class="comanda-actions">
             ${c.estado === 'pendiente' ? `
-              <button class="btn btn-negro" data-avanzar="${c.id}" data-sig="preparando">🍳 preparar</button>
+              <button class="btn btn-negro" data-avanzar="${c.id}" data-sig="preparando">preparar</button>
             ` : c.estado === 'preparando' ? `
-              <button class="btn btn-negro" data-avanzar="${c.id}" data-sig="listo" style="background:#22c55e; border-color:#22c55e;">✅ listo</button>
+              <button class="btn btn-negro" data-avanzar="${c.id}" data-sig="listo" style="background:#22c55e; border-color:#22c55e;">listo</button>
             ` : `
-              <button class="btn" data-avanzar="${c.id}" data-sig="entregado">📦 entregar</button>
+              <button class="btn" data-avanzar="${c.id}" data-sig="entregado">entregar</button>
             `}
           </div>
         </div>`).join('') : '<p class="vacio">No hay comandas activas en esta sección.</p>'}
@@ -1119,8 +1119,8 @@ async function cobrar() {
           <p class="muted">${r.mesa || 'Caja'} · ${PAGOS[pagoSelec]}${r.cambio != null ? ` · cambio <b>${cop(r.cambio)}</b>` : ''}</p>
           ${r.tarjeta ? `<p class="sellos-ok">${esc(r.tarjeta.nombre)} · ${r.tarjeta.sellos >= r.tarjeta.meta ? '¡completó la tarjeta! premio en la próxima compra' : `${r.tarjeta.sellos} de ${r.tarjeta.meta} sellos`}${r.premio ? ' · premio canjeado' : ''}</p>` : ''}
           <div style="display:flex; gap:10px; justify-content:center; margin-top:20px;">
-            <button type="button" class="btn btn-negro" id="btn-print-tkt">🖨️ imprimir ticket</button>
-            <button type="button" class="btn" id="btn-wa-tkt">📱 whatsapp</button>
+            <button type="button" class="btn btn-negro" id="btn-print-tkt">imprimir ticket</button>
+            <button type="button" class="btn" id="btn-wa-tkt">whatsapp</button>
           </div>
         </div>`, () => true, { ok: 'nueva venta' });
       $('#btn-print-tkt')?.addEventListener('click', () => imprimirTicket(r));
@@ -1424,8 +1424,8 @@ async function ajustes() {
     <h2 class="sub">canales y redes oficiales</h2>
     <p class="muted">Enlaces directos a la ficha de Google Maps e Instagram para verificar reseñas o compartir con clientes.</p>
     <div style="display:flex; flex-wrap:wrap; gap:10px; margin: 12px 0 24px;">
-      <a class="btn btn-sm" href="https://www.google.com/maps/place/La+Central+Caf%C3%A9/@5.5591249,-73.3519444,17z/data=!3m1!4b1!4m6!3m5!1s0x8e6a7db7cf35b097:0xa33f85c90770b3aa!8m2!3d5.5591249!4d-73.3493695!16s%2Fg%2F11nw2z8k38" target="_blank" rel="noopener">📍 Google Maps · Reseñas</a>
-      <a class="btn btn-sm" href="https://www.instagram.com/lacentral.tunja/" target="_blank" rel="noopener">📸 Instagram @lacentral.tunja</a>
+      <a class="btn btn-sm" href="https://www.google.com/maps/place/La+Central+Caf%C3%A9/@5.5591249,-73.3519444,17z/data=!3m1!4b1!4m6!3m5!1s0x8e6a7db7cf35b097:0xa33f85c90770b3aa!8m2!3d5.5591249!4d-73.3493695!16s%2Fg%2F11nw2z8k38" target="_blank" rel="noopener">Google Maps · Reseñas</a>
+      <a class="btn btn-sm" href="https://www.instagram.com/lacentral.tunja/" target="_blank" rel="noopener">Instagram @lacentral.tunja</a>
     </div>
   </section>`;
   $$('tr[data-p]').forEach(tr => {

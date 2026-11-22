@@ -16,7 +16,7 @@ const NOCHE_W = {"es": "M105.2 112.2Q105.2 108.3 103.8 104.7Q102.3 101.1 99.8 98
 const I18N = {
   es: {
     langCode: 'EN',
-    introT: 'menú',
+    introT: 'café',
     nocheK: 'la central · tunja · jue a sáb · 4 a 10 pm',
     porConfirmar: 'por confirmar',
     nocheW: 'parrilla',
@@ -49,10 +49,10 @@ const I18N = {
     fbSubtitle: 'Tu orden está siendo preparada. En breve te la llevamos a tu mesa.',
     fbQuestion: '¿Cómo va tu experiencia hoy con nosotros?',
     fbStarHint: 'Toca las estrellas para calificar',
-    fbCheerTitle: '¡Nos alegra mucho! 😍',
+    fbCheerTitle: '¡Nos alegra mucho! ',
     fbCheerDesc: 'Tu reseña de 5 estrellas nos ayuda un montón a que más personas descubran nuestro café en Tunja. ¿Nos regalas tu opinión en Google Maps?',
-    fbGoogleBtn: '⭐ Dejar reseña de 5★ en Google Maps',
-    fbIgBtn: '📸 Seguirnos en Instagram @lacentral.tunja',
+    fbGoogleBtn: 'Dejar reseña de 5★ en Google Maps',
+    fbIgBtn: 'Seguirnos en Instagram @lacentral.tunja',
     fbLowTitle: 'Queremos que tu visita sea perfecta',
     fbLowDesc: 'Cuéntanos qué podemos solucionar o mejorar para ti antes de que te vayas:',
     fbSendBtn: 'Enviar sugerencia a la barra',
@@ -61,7 +61,7 @@ const I18N = {
   },
   en: {
     langCode: 'ES',
-    introT: 'menu',
+    introT: 'café',
     nocheK: 'la central · tunja · thu–sat · 4–10 pm',
     porConfirmar: 'ask us',
     nocheW: 'grill',
@@ -94,10 +94,10 @@ const I18N = {
     fbSubtitle: 'Your order is being prepared. We will bring it to your table shortly.',
     fbQuestion: 'How is your experience with us today?',
     fbStarHint: 'Tap the stars to rate',
-    fbCheerTitle: 'We are thrilled! 😍',
+    fbCheerTitle: 'We are thrilled! ',
     fbCheerDesc: 'Your 5-star review helps more coffee lovers find us in Tunja. Would you leave us a review on Google Maps?',
-    fbGoogleBtn: '⭐ Leave a 5★ review on Google Maps',
-    fbIgBtn: '📸 Follow on Instagram @lacentral.tunja',
+    fbGoogleBtn: 'Leave a 5★ review on Google Maps',
+    fbIgBtn: 'Follow on Instagram @lacentral.tunja',
     fbLowTitle: 'We want your visit to be perfect',
     fbLowDesc: 'Tell us what we can improve or fix for you right now:',
     fbSendBtn: 'Send feedback to the bar',
@@ -115,6 +115,7 @@ function aplicarIdioma() {
   if (nk) nk.textContent = t.nocheK;
   if (nw) nw.setAttribute('d', NOCHE_W[lang]);
   if (nt) nt.textContent = t.nocheT;
+  const dt = $('#txt-dia-t'); if (dt) dt.textContent = t.nocheT;
   $('#txt-hint').innerHTML = t.hint;
   $('#menu-search').placeholder = t.searchPlaceholder;
   $('#txt-pie-test').textContent = t.calidadPie;
@@ -345,7 +346,7 @@ $('#btn-enviar-wsp').onclick = () => {
   const notas = $('#cart-notas-input').value.trim();
   const total = cart.reduce((acc, it) => acc + it.precio * it.cantidad, 0);
 
-  let msg = `*☕ PEDIDO DESDE EL MENÚ DIGITAL - LA CENTRAL · TUNJA*\n`;
+  let msg = `*PEDIDO DESDE EL MENÚ DIGITAL - LA CENTRAL · TUNJA*\n`;
   msg += `*${mesaSel}*${cliente ? ` · ${cliente}` : ''}\n`;
   msg += `--------------------------------------\n`;
   for (const it of cart) {
@@ -376,7 +377,7 @@ function abrirModalFeedback(mesa = 'Mesa 1', cliente = '', vieneDePedido = false
   if (!modal) return;
 
   const topPill = $('#fb-top-pill');
-  if (topPill) topPill.textContent = vieneDePedido ? `☕ ${mesa} · La Central` : '☕ La Central · Tunja';
+  if (topPill) topPill.textContent = vieneDePedido ? `${mesa} · La Central` : 'La Central · Tunja';
 
   const title = $('#fb-title');
   if (title) title.textContent = vieneDePedido ? I18N[lang].fbTitle : (lang === 'en' ? 'how was your visit?' : '¿cómo estuvo tu visita?');
@@ -416,12 +417,12 @@ function seleccionarEstrellas(n) {
   const flowLow = $('#fb-flow-low');
 
   if (n >= 4) {
-    if (starText) starText.textContent = n === 5 ? (lang === 'en' ? '⭐⭐⭐⭐⭐ Excellent!' : '⭐⭐⭐⭐⭐ ¡Excelente!') : (lang === 'en' ? '⭐⭐⭐⭐ Very Good!' : '⭐⭐⭐⭐ ¡Muy bueno!');
+    if (starText) starText.textContent = n === 5 ? (lang === 'en' ? 'Excellent!' : '¡Excelente!') : (lang === 'en' ? 'Very Good!' : '¡Muy bueno!');
     if (flowHigh) flowHigh.hidden = false;
     if (flowLow) flowLow.hidden = true;
     enviarFeedbackSilencioso(n, '');
   } else {
-    if (starText) starText.textContent = n === 1 ? (lang === 'en' ? '⭐ Fair' : '⭐ Regular') : `${n} ${lang === 'en' ? 'stars' : 'estrellas'}`;
+    if (starText) starText.textContent = n === 1 ? (lang === 'en' ? 'Fair' : 'Regular') : `${n} ${lang === 'en' ? 'stars' : 'estrellas'}`;
     if (flowHigh) flowHigh.hidden = true;
     if (flowLow) flowLow.hidden = false;
   }

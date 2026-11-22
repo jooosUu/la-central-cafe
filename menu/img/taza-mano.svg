@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" fill="currentColor">
+  <!-- Taza dibujada a mano (pareja de llama.svg, original de La Central): vapor que sube y una llamita adentro.
+       El mismo filtro le da el borde tembloroso. -->
+  <defs>
+    <filter id="tiembla-taza" x="-10%" y="-10%" width="120%" height="120%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.045" numOctaves="2" seed="7"/>
+      <feDisplacementMap in="SourceGraphic" scale="9"/>
+    </filter>
+  </defs>
+  <g filter="url(#tiembla-taza)">
+    <!-- cuerpo con una llamita recortada adentro -->
+    <path fill-rule="evenodd" d="M34 104C34 100 37 98 41 98L171 98C175 98 178 100 178 104C178 166 148 206 106 206C64 206 34 166 34 104ZM106 186C90 186 80 174 82 160C84 146 96 140 96 124C108 134 112 146 108 158C116 150 118 142 116 132C128 142 132 154 130 166C128 178 120 186 106 186Z"/>
+    <!-- asa -->
+    <path fill-rule="evenodd" d="M172 112C198 106 218 120 216 142C214 166 192 176 166 170L170 154C186 158 198 154 199 142C200 130 190 124 174 128Z"/>
+    <!-- plato -->
+    <path d="M14 214C14 210 17 208 21 208L191 208C195 208 198 210 198 214C198 222 186 228 172 228L40 228C26 228 14 222 14 214Z"/>
+    <!-- vapor -->
+    <path fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round" d="M76 82C64 68 88 56 76 38M106 82C92 62 122 50 106 24M136 82C124 68 148 56 136 38"/>
+    <!-- trazos sueltos, como los de la llama -->
+    <path fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round" d="M20 92C16 80 18 70 24 62M196 70C202 62 210 58 218 58M174 40C176 32 182 26 188 24M8 176C4 168 4 160 8 152"/>
+  </g>
+</svg>

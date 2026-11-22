@@ -10,11 +10,13 @@
 <link rel="preload" href="fonts/Utendo-Medium.ttf" as="font" type="font/ttf" crossorigin>
 <script>
 /* Modo del día: café (B/N) por defecto; parrilla (negro + fuego) jueves, viernes y sábado de 4 a 10 pm.
-   Prueba manual: ?modo=parrilla | ?modo=cafe */
+   Prueba manual: ?modo=parrilla | ?modo=cafe. El botón de la cabecera cambia de menú y lo recuerda
+   mientras la pestaña siga abierta (al volver otro día, manda otra vez el horario). */
 (function () {
   var DIAS_PARRILLA = [4, 5, 6];          // 0 = domingo … 4 = jueves, 5 = viernes, 6 = sábado
   var DESDE = 16, HASTA = 22;              // 4:00 pm a 9:59 pm
   var forzado = new URLSearchParams(location.search).get('modo');
+  try { forzado = forzado || sessionStorage.getItem('lc-modo'); } catch (e) {}
   function modo() {
     if (forzado === 'parrilla' || forzado === 'cafe') return forzado;
     var d = new Date(), h = d.getHours();
@@ -27,12 +29,18 @@
     var meta = document.querySelector('meta[name="theme-color"]');
     if (meta) meta.content = m === 'parrilla' ? '#0D0B0A' : '#FFFFFF';
   }
+  window.cambiarModo = function () {
+    forzado = document.documentElement.dataset.modo === 'parrilla' ? 'cafe' : 'parrilla';
+    try { sessionStorage.setItem('lc-modo', forzado); } catch (e) {}
+    aplicar();
+    scrollTo({ top: 0, behavior: 'smooth' });
+  };
   aplicar();
   setInterval(aplicar, 60000);
   document.addEventListener('visibilitychange', function () { if (!document.hidden) aplicar(); });
 })();
 </script>
-<link rel="stylesheet" href="styles.css?v=48">
+<link rel="stylesheet" href="styles.css?v=60">
 <script type="module" src="vendor/model-viewer.min.js"></script>
 </head>
 <body>
@@ -50,13 +58,21 @@
     <button type="button" class="btn-review-pill" id="btn-open-review" aria-label="Calificar en Google Maps">
       <span class="pill-star">★</span> <span id="txt-review-pill">calificar</span>
     </button>
+    <!-- cambia entre el menú de día (café) y el de noche (parrilla) -->
+    <button type="button" class="btn-review-pill btn-modo" id="btn-modo" onclick="cambiarModo()" aria-label="Cambiar de menú">
+      <span class="modo-a-noche">parrilla</span><span class="modo-a-dia">café</span>
+    </button>
     <button type="button" class="btn-lang" id="btn-lang" aria-label="Cambiar idioma"><span id="lang-label">EN</span></button>
   </div>
 </header>
 
 <section class="intro">
   <canvas class="fuego" data-alto="0.7" aria-hidden="true"></canvas>
-  <p class="intro-t" id="txt-intro-t">menú</p>
+  <div class="dia-marca">
+    <img class="dia-taza" src="img/taza-mano.svg?v=1" alt="" aria-hidden="true">
+    <p class="intro-t" id="txt-intro-t">café</p>
+    <p class="dia-tag" id="txt-dia-t">café de día, fuego de noche</p>
+  </div>
   <!-- Portada de noche (modo parrilla): logotipo fuera de foco, llama de pincel, serif + letra de máquina -->
   <div class="noche" aria-hidden="true">
     <p class="noche-kicker" id="txt-noche-k">la central · tunja · jue a sáb · 4 a 10 pm</p>
@@ -114,7 +130,7 @@
 
 <!-- Botón flotante de carrito / comanda -->
 <button class="btn-cart-float" id="btn-cart-float" aria-label="Ver mi pedido" hidden>
-  <span class="cart-icon">🛒</span>
+  <span class="cart-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h2l2.4 10.2a1 1 0 0 0 1 .8h8.9a1 1 0 0 0 1-.8L20 8H6.2"/><circle cx="9.5" cy="19" r="1.3"/><circle cx="17" cy="19" r="1.3"/></svg></span>
   <span class="cart-count-badge" id="cart-count">0</span>
   <span class="cart-total-badge" id="cart-subtotal">$0</span>
 </button>
@@ -193,7 +209,7 @@
       <p id="txt-maps-desc">La Central · Calidad de origen, filtrados y buena vibra en Tunja, Boyacá.</p>
       <div class="sc-actions">
         <a href="https://www.google.com/maps/place/La+Central+Caf%C3%A9/@5.5591249,-73.3519444,17z/data=!3m1!4b1!4m6!3m5!1s0x8e6a7db7cf35b097:0xa33f85c90770b3aa!8m2!3d5.5591249!4d-73.3493695!16s%2Fg%2F11nw2z8k38?entry=ttu" target="_blank" rel="noopener" class="btn-sc btn-sc-outline">
-          <span>📍 Cómo llegar</span>
+          <span>Cómo llegar</span>
         </a>
         <button type="button" class="btn-sc btn-sc-solid" id="btn-footer-review">
           <span>★ Dejar reseña</span>
@@ -222,7 +238,7 @@
       <p id="txt-ig-desc">Fotos de nuestros cafés de origen, nuevos granos, métodos de extracción y eventos especiales.</p>
       <div class="sc-actions">
         <a href="https://www.instagram.com/lacentral.tunja/" target="_blank" rel="noopener" class="btn-sc btn-sc-solid">
-          <span>📸 Seguir en Instagram</span>
+          <span>Seguir en Instagram</span>
         </a>
       </div>
     </div>
@@ -241,7 +257,7 @@
   <div class="fb-box">
     <button type="button" class="fb-close" id="btn-fb-top-close" aria-label="Cerrar">×</button>
     <header class="fb-head">
-      <div class="fb-top-pill" id="fb-top-pill">☕ La Central</div>
+      <div class="fb-top-pill" id="fb-top-pill">La Central</div>
       <h2 id="fb-title">¡pedido en camino!</h2>
       <p class="fb-subtitle" id="fb-subtitle">Tu orden fue enviada por WhatsApp para confirmación. ¿Cómo calificarías tu experiencia hoy?</p>
     </header>
@@ -261,13 +277,13 @@
 
       <!-- Si califica 4 o 5 estrellas: Google Maps y Redes -->
       <div class="fb-flow fb-flow-high" id="fb-flow-high" hidden>
-        <p class="fb-cheer-title" id="fb-cheer-title">¡Muchas gracias! 😍</p>
+        <p class="fb-cheer-title" id="fb-cheer-title">¡Muchas gracias! </p>
         <p class="fb-cheer-desc" id="fb-cheer-desc">Tu reseña de 5 estrellas nos ayuda un montón a crecer en Tunja. ¿Nos regalas tu opinión en Google Maps?</p>
         <a href="https://www.google.com/maps/place/La+Central+Caf%C3%A9/@5.5591249,-73.3519444,17z/data=!3m1!4b1!4m6!3m5!1s0x8e6a7db7cf35b097:0xa33f85c90770b3aa!8m2!3d5.5591249!4d-73.3493695!16s%2Fg%2F11nw2z8k38?entry=ttu" target="_blank" rel="noopener" class="btn-fb-action btn-fb-google" id="btn-fb-google-direct">
           <span>★ Dejar 5 estrellas en Google Maps</span>
         </a>
         <a href="https://www.instagram.com/lacentral.tunja/" target="_blank" rel="noopener" class="btn-fb-action btn-fb-instagram">
-          <span>📸 Seguir en Instagram @lacentral.tunja</span>
+          <span>Seguir en Instagram @lacentral.tunja</span>
         </a>
       </div>
 
@@ -313,9 +329,9 @@
   </div>
 </dialog>
 
-<script src="granos.js?v=5" defer></script>
+<script src="granos.js?v=7" defer></script>
 <script src="fuego.js?v=7" defer></script>
 <script src="video.js?v=4" defer></script>
-<script type="module" src="app.js?v=38"></script>
+<script type="module" src="app.js?v=40"></script>
 </body>
 </html>
