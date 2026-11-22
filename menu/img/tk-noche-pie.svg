@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 210" preserveAspectRatio="xMidYMax slice">
+  <!-- Pie del ticket de noche: fuego de aerosol que sube desde el borde del papel. Solo negro. -->
+  <defs>
+    <filter id="humo" x="-10%" y="-30%" width="120%" height="140%" color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency="0.02 0.035" numOctaves="3" seed="5" result="d"/>
+      <feDisplacementMap in="SourceGraphic" in2="d" scale="34" result="g"/>
+      <feGaussianBlur in="g" stdDeviation="6" result="b"/>
+      <feTurbulence type="fractalNoise" baseFrequency="1.15" numOctaves="1" seed="9" result="n"/>
+      <feComposite in="b" in2="n" operator="arithmetic" k2="1.25" k3="1" k4="-.93"/>
+      <feComponentTransfer><feFuncR type="linear" slope="0"/><feFuncG type="linear" slope="0"/><feFuncB type="linear" slope="0"/><feFuncA type="discrete" tableValues="0 1"/></feComponentTransfer>
+    </filter>
+  </defs>
+  <g filter="url(#humo)" fill="#000">
+    <!-- lenguas de fuego (base ancha, puntas que se apagan) -->
+    <path d="M-20 215C-10 160 10 150 18 110C30 140 40 150 46 120C52 80 64 60 60 20C82 60 96 90 92 130C104 112 110 96 106 70C128 100 138 132 132 160C142 150 148 136 146 118C164 140 170 160 168 182C178 170 184 150 182 128C204 150 214 172 210 196C222 180 226 160 222 140C246 160 258 184 254 206C266 190 270 170 266 150C292 170 304 196 300 215Z"/>
+    <path d="M40 215C46 186 60 176 64 150C74 170 82 176 84 160C92 176 96 190 90 215Z"/>
+    <path d="M180 215C186 190 196 180 198 160C208 178 214 186 214 172C224 186 226 200 222 215Z"/>
+    <circle cx="70" cy="40" r="5"/><circle cx="120" cy="30" r="3.5"/><circle cx="190" cy="70" r="4"/><circle cx="250" cy="96" r="3"/><circle cx="26" cy="70" r="3"/><circle cx="150" cy="62" r="2.5"/>
+  </g>
+</svg>

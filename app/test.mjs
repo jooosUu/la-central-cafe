@@ -9,7 +9,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import assert from 'node:assert/strict';
 
+// contra otro servidor solo a propósito: node test.mjs http://… --si-ensuciar (crea ventas y clientes de prueba allí)
 let BASE = process.argv[2];
+if (BASE && !process.argv.includes('--si-ensuciar')) {
+  console.error('Estas pruebas crean ventas, clientes y movimientos. Para correrlas contra ' + BASE + ' agrega --si-ensuciar.');
+  process.exit(1);
+}
 let cerrar = async () => {};
 if (!BASE) {
   const dbTmp = join(tmpdir(), `lacentral-prueba-${process.pid}.db`);
@@ -143,6 +148,10 @@ await t('QR por mesa (solo dueño) y validación de dirección', async () => {
   assert.equal((await caja('GET', '/qr?url=https://x.co/&mesas=2')).status, 403);
   const q = await admin('GET', '/qr?url=' + encodeURIComponent('https://menu.ejemplo.co/') + '&mesas=3');
   assert.equal(q.data.length, 3); assert.equal(q.data[2].url, 'https://menu.ejemplo.co/?mesa=3'); assert.ok(q.data[0].svg.startsWith('<svg'));
+  const qt = await admin('GET', '/qr?tipo=tarjeta&url=' + encodeURIComponent('https://menu.ejemplo.co/'));
+  assert.equal(qt.data.length, 1);
+  assert.equal(qt.data[0].url, 'https://menu.ejemplo.co/tarjeta');
+  assert.ok(qt.data[0].svg.startsWith('<svg'));
   assert.equal((await admin('GET', '/qr?url=javascript:alert(1)&mesas=2')).status, 400);
   assert.equal((await admin('GET', '/qr?url=https://x.co/&mesas=500')).status, 400);
 });
@@ -197,7 +206,8 @@ await t('tarjeta de sellos: 1 sello por compra, premio a los 8 y anular devuelve
   assert.equal(tj.status, 200);
   assert.equal(tj.data.nombre, 'Laura'); assert.equal(tj.data.sellos, 0); assert.equal(tj.data.meta, 8);
   assert.equal(tj.data.telefono, '310 *** 4521');
-  assert.equal((await anon('POST', '/tarjeta', { nombre: 'Otra', telefono: '3105554521' })).data.token, tj.data.token);
+  assert.equal((await anon('POST', '/tarjeta', { nombre: 'Otra', telefono: '3105554521' })).status, 400);   // no deja ver tarjetas ajenas
+  assert.equal((await anon('POST', '/tarjeta', { nombre: 'láura', telefono: '3105554521' })).data.token, tj.data.token);
   assert.equal((await anon('GET', '/tarjeta/' + tj.data.token)).data.sellos, 0);
   // la caja la busca por celular (requiere sesión)
   assert.equal((await anon('GET', '/clientes?q=3105554521')).status, 401);
@@ -209,7 +219,11 @@ await t('tarjeta de sellos: 1 sello por compra, premio a los 8 y anular devuelve
   const ventas = [];
   for (let i = 0; i < 8; i++) { const v = await vender(); assert.equal(v.status, 200); ventas.push(v.data); }
   assert.equal(ventas[7].tarjeta.sellos, 8);
-  assert.equal((await anon('GET', '/tarjeta/' + tj.data.token)).data.premio, true);
+  assert.equal(ventas[7].tarjeta.iconos.length, 8);
+  assert.ok(ventas[7].tarjeta.iconos.every(x => x === 'cafe' || x === 'fuego'));
+  const tj8 = (await anon('GET', '/tarjeta/' + tj.data.token)).data;
+  assert.equal(tj8.premio, true);
+  assert.equal(tj8.iconos.length, Math.min(tj8.sellos, tj8.meta));
   // café gratis: necesita un café en la cuenta
   assert.equal((await vender({ premio: 'cafe' })).status, 400);
   await admin('PUT', '/productos/cafe', { precio: 4000 });
@@ -217,6 +231,7 @@ await t('tarjeta de sellos: 1 sello por compra, premio a los 8 y anular devuelve
   assert.equal(vc.status, 200);
   assert.equal(vc.data.descuento, 4000); assert.equal(vc.data.total, vc.data.subtotal - 4000);
   assert.equal(vc.data.tarjeta.sellos, 1);   // 8 - 8 del canje + 1 de esta compra
+  assert.equal(vc.data.tarjeta.iconos.length, 1);
   // anular la venta del canje devuelve el premio
   await admin('POST', `/ventas/${vc.data.id}/anular`);
   assert.equal((await caja('GET', '/clientes?q=3105554521')).data.sellos, 8);
@@ -226,8 +241,51 @@ await t('tarjeta de sellos: 1 sello por compra, premio a los 8 y anular devuelve
   assert.equal(vd.data.tarjeta.sellos, 1);
   for (const v of [...ventas, vd.data]) await admin('POST', `/ventas/${v.id}/anular`);
   assert.equal((await caja('GET', '/clientes?q=3105554521')).data.sellos, 0);
+  // lista de clientes e historia (solo con sesión)
+  assert.equal((await anon('GET', '/clientes/lista')).status, 401);
+  const lista = (await caja('GET', '/clientes/lista')).data;
+  const laura = lista.clientes.find(c => c.telefono === '3105554521');
+  assert.equal(laura.sellos, 0); assert.equal(laura.premio, false);
+  const hist = (await caja('GET', '/clientes/' + laura.id)).data;
+  assert.equal(hist.nombre, 'Laura'); assert.ok(Array.isArray(hist.historial));
+  assert.equal((await caja('GET', '/clientes/999999')).status, 404);
   // venta con cliente inexistente: error, no se cobra a ciegas
   assert.equal((await caja('POST', '/ventas', { items: [{ producto_id: 'aguila', cantidad: 1 }], pago: 'nequi', cliente: '3000000000' })).status, 400);
+});
+await t('login: muchos PIN errados quedan bloqueados', async () => {
+  let bloqueado = false;
+  for (let i = 0; i < 12 && !bloqueado; i++) {
+    const r = await fetch(BASE + '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json', origin: BASE }, body: JSON.stringify({ usuario: 'caja2', pin: '0000' }) });
+    bloqueado = r.status === 429;
+  }
+  assert.ok(bloqueado);
+});
+await t('cabeceras de seguridad y bloqueo de peticiones de otro sitio', async () => {
+  const r = await fetch(BASE + '/');
+  assert.equal(r.headers.get('x-frame-options'), 'DENY');
+  assert.match(r.headers.get('content-security-policy'), /frame-ancestors 'none'/);
+  const x = await fetch(BASE + '/api/logout', { method: 'POST', headers: { 'sec-fetch-site': 'cross-site' } });
+  assert.equal(x.status, 403);
+});
+await t('PIN: el del dueño pide 6 números y no se aceptan PIN obvios', async () => {
+  const yo = (await admin('GET', '/sesion')).data;
+  assert.equal((await admin('PUT', `/usuarios/${yo.id}/pin`, { pin: '4821' })).status, 400);
+  assert.equal((await admin('PUT', `/usuarios/${yo.id}/pin`, { pin: '123456' })).status, 400);
+  assert.equal((await admin('PUT', `/usuarios/${yo.id}/pin`, { pin: '777777' })).status, 400);
+});
+await t('aviso de copia de seguridad pendiente (solo dueño)', async () => {
+  assert.equal((await caja('GET', '/respaldo/estado')).status, 403);
+  assert.equal(typeof (await admin('GET', '/respaldo/estado')).data.pendiente, 'boolean');
+});
+await t('dirección mal escrita no tumba el servidor', async () => {
+  assert.equal((await fetch(BASE + '/%E0%A4%A')).status, 404);
+});
+await t('video de la parrilla se sirve por partes (iPhone)', async () => {
+  const r = await fetch(BASE + '/video/fondo-movil.mp4', { headers: { range: 'bytes=0-99' } });
+  assert.equal(r.status, 206); assert.equal(r.headers.get('content-type'), 'video/mp4');
+  assert.match(r.headers.get('content-range'), /^bytes 0-99\/\d+$/);
+  assert.equal((await r.arrayBuffer()).byteLength, 100);
+  assert.equal((await fetch(BASE + '/video/fondo-movil.mp4', { headers: { range: 'bytes=999999999-' } })).status, 416);
 });
 await t('petición desde otro origen es bloqueada', async () => {
   const r = await fetch(BASE + '/api/logout', { method: 'POST', headers: { origin: 'https://malicioso.example' } });

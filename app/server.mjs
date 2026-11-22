@@ -5,13 +5,13 @@
 //   /api/... -> API JSON
 import { createServer } from 'node:http';
 import { readFile, stat, unlink } from 'node:fs/promises';
-import { readdirSync } from 'node:fs';
+import { readdirSync, createReadStream } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes } from 'node:crypto';
 import { networkInterfaces } from 'node:os';
-import { db, seed, migrar, respaldoDiario, hashPin, checkPin } from './db.mjs';
+import { db, seed, migrar, respaldoDiario, hashPin, checkPin, ajuste, cerrarBase } from './db.mjs';
 import { createRequire } from 'node:module';
 
 // generador de QR (librería qrcode, MIT, copiada en vendor/ para no depender de internet)
@@ -39,6 +39,15 @@ const fmtBogota = new Intl.DateTimeFormat('sv-SE', {
 });
 const ahora = (d = new Date()) => fmtBogota.format(d);
 const hoy = () => ahora().slice(0, 10);
+const fmtDiaHora = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Bogota', weekday: 'short', hour: '2-digit', hour12: false });
+// parrilla: jueves, viernes y sábado de 4:00 pm a 9:59 pm (hora Colombia) — igual que el menú
+function esHoraParrilla(d = new Date()) {
+  if (process.env.LACENTRAL_MODO === 'parrilla') return true;
+  if (process.env.LACENTRAL_MODO === 'cafe') return false;
+  const p = Object.fromEntries(fmtDiaHora.formatToParts(d).map(x => [x.type, x.value]));
+  const h = Number(p.hour) % 24;
+  return ['Thu', 'Fri', 'Sat'].includes(p.weekday) && h >= 16 && h < 22;
+}
 const isDate = s => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
 const num = (v, { min = -Infinity, max = Infinity, int = false } = {}) => {
   const n = Number(v);
@@ -59,11 +68,18 @@ function tx(fn) {
 // ---------- sesiones (persistentes en SQLite; expiran a las 12 h) ----------
 const SESION_MS = 12 * 3600 * 1000;
 const intentos = new Map(); // ip -> [timestamps] para frenar adivinar PINs
+const fallosUsuario = new Map(); // usuario -> [timestamps]: 30 fallos en 1 h bloquean ese usuario hasta que pase la hora
 const feedbackIntentos = new Map(); // ip -> [timestamps] para frenar spam en feedback
 const tarjetaIntentos = new Map(); // ip -> [timestamps] para frenar que creen/consulten tarjetas en masa
+const topeGlobal = new Map();      // tipo -> [timestamps] de la última hora, sumando todas las IP
+function limiteGlobal(tipo, max) {
+  const t = Date.now(), xs = (topeGlobal.get(tipo) || []).filter(x => t - x < 3600_000);
+  if (xs.length >= max) fail(429, 'Hay demasiada actividad en este momento. Intenta más tarde.');
+  xs.push(t); topeGlobal.set(tipo, xs);
+}
 
 function clientIp(req) {
-  return (TRAS_PROXY && String(req.headers['x-forwarded-for'] || '').split(',')[0].trim()) || req.socket.remoteAddress || 'local';
+  return (TRAS_PROXY && String(req.headers['x-forwarded-for'] || '').split(',').pop().trim()) || req.socket.remoteAddress || 'local';
 }
 function limpiarLimites() {
   const ahoraMs = Date.now();
@@ -71,6 +87,10 @@ function limpiarLimites() {
   for (const [k, xs] of intentos) {
     const f = xs.filter(t => ahoraMs - t < 60_000);
     if (f.length) intentos.set(k, f); else intentos.delete(k);
+  }
+  for (const [k, xs] of fallosUsuario) {
+    const f = xs.filter(t => ahoraMs - t < 3600_000);
+    if (f.length) fallosUsuario.set(k, f); else fallosUsuario.delete(k);
   }
   for (const [k, xs] of tarjetaIntentos) {
     const f = xs.filter(t => ahoraMs - t < 600_000);
@@ -166,9 +186,10 @@ function registrarVenta(u, body) {
     const ventaId = Number(db.prepare('INSERT INTO ventas (fecha, usuario_id, total, pago, recibido, mesa, propina, cliente_id, descuento, premio) VALUES (?,?,?,?,?,?,?,?,?,?)')
       .run(fecha, u.id, total, pago, recibido, mesa, propina, cliente?.id ?? null, descuento, premio).lastInsertRowid);
     if (cliente) {
-      const ms = db.prepare('INSERT INTO sellos (cliente_id, venta_id, fecha, cantidad, tipo) VALUES (?,?,?,?,?)');
-      if (premio) ms.run(cliente.id, ventaId, fecha, -SELLOS_META, 'canje');
-      ms.run(cliente.id, ventaId, fecha, 1, 'sello');
+      const ms = db.prepare('INSERT INTO sellos (cliente_id, venta_id, fecha, cantidad, tipo, icono) VALUES (?,?,?,?,?,?)');
+      const icono = esHoraParrilla() ? 'fuego' : 'cafe';
+      if (premio) ms.run(cliente.id, ventaId, fecha, -SELLOS_META, 'canje', icono);
+      ms.run(cliente.id, ventaId, fecha, 1, 'sello', icono);
     }
     const ii = db.prepare('INSERT INTO venta_items (venta_id, producto_id, nombre, variante, cantidad, precio, costo) VALUES (?,?,?,?,?,?,?)');
     const mv = db.prepare(`INSERT INTO movimientos (fecha, insumo_id, tipo, cantidad, costo, venta_id, usuario_id) VALUES (?,?,'venta',?,?,?,?)`);
@@ -186,7 +207,7 @@ function registrarVenta(u, body) {
       db.prepare(`UPDATE comandas SET estado = 'cobrado' WHERE id = ?`).run(cid);
     }
     const alertas = db.prepare('SELECT nombre, stock, minimo, unidad FROM insumos WHERE activo = 1 AND stock <= minimo ORDER BY stock').all();
-    const tarjeta = cliente ? { nombre: cliente.nombre, sellos: saldoSellos(cliente.id), meta: SELLOS_META } : null;
+    const tarjeta = cliente ? { nombre: cliente.nombre, sellos: saldoSellos(cliente.id), meta: SELLOS_META, iconos: iconosSellos(cliente.id) } : null;
     return { id: ventaId, fecha, mesa, subtotal, descuento, premio, propina, total, tarjeta, cambio: recibido != null ? recibido - total : null, alertas };
   });
 }
@@ -201,6 +222,13 @@ const celular = v => {
   return /^\d{7,10}$/.test(d) ? d : null;
 };
 const saldoSellos = id => db.prepare('SELECT COALESCE(SUM(cantidad), 0) n FROM sellos WHERE cliente_id = ?').get(id).n;
+// iconos de los sellos que están puestos en la tarjeta actual (los más recientes), en orden de compra
+function iconosSellos(id) {
+  const n = Math.max(0, Math.min(saldoSellos(id), SELLOS_META));
+  if (!n) return [];
+  return db.prepare(`SELECT icono FROM sellos WHERE cliente_id = ? AND tipo = 'sello' ORDER BY id DESC LIMIT ?`)
+    .all(id, n).map(r => r.icono || 'cafe').reverse();
+}
 function buscarCliente(q) {
   const s = String(q).trim();
   if (/^[a-f0-9]{32}$/.test(s)) return db.prepare('SELECT * FROM clientes WHERE token = ?').get(s);
@@ -211,8 +239,9 @@ function tarjetaDe(c) {
   const sellos = saldoSellos(c.id);
   return {
     token: c.token, nombre: c.nombre, sellos, meta: SELLOS_META, premio: sellos >= SELLOS_META, descuento: PREMIO_DESCUENTO,
+    iconos: iconosSellos(c.id),
     telefono: c.telefono.slice(0, 3) + ' *** ' + c.telefono.slice(-4),
-    historial: db.prepare('SELECT fecha, cantidad, tipo FROM sellos WHERE cliente_id = ? ORDER BY id DESC LIMIT 6').all(c.id),
+    historial: db.prepare('SELECT fecha, cantidad, tipo, icono FROM sellos WHERE cliente_id = ? ORDER BY id DESC LIMIT 6').all(c.id),
   };
 }
 function limitarTarjeta(req, max) {
@@ -425,6 +454,7 @@ ruta('POST', '/api/feedback', ({ body, req }) => {
   const ip = clientIp(req), t = Date.now();
   const lista = (feedbackIntentos.get(ip) || []).filter(x => t - x < 600_000);
   if (lista.length >= 5) fail(429, 'Demasiadas opiniones enviadas. Intenta más tarde.');
+  limiteGlobal('feedback', 300);
   lista.push(t); feedbackIntentos.set(ip, lista);
   const estrellas = num(body?.estrellas, { min: 1, max: 5, int: true }) || 5;
   const comentario = texto(body?.comentario, 500) || '';
@@ -441,6 +471,9 @@ ruta('POST', '/api/tarjeta', ({ body, req }) => {
   const tel = celular(body?.telefono) || fail(400, 'Escribe tu número de celular');
   const nombre = texto(body?.nombre, 30).split(/\s+/)[0] || fail(400, 'Escribe tu nombre');
   let c = db.prepare('SELECT * FROM clientes WHERE telefono = ?').get(tel);
+  if (!c) limiteGlobal('tarjeta', 300);
+  const base = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  if (c && base(c.nombre) !== base(nombre)) fail(400, 'Ese celular ya tiene tarjeta con otro nombre. Escribe el nombre con el que la sacaste.');
   if (!c) {
     db.prepare('INSERT INTO clientes (telefono, nombre, token, creado) VALUES (?,?,?,?)').run(tel, nombre, randomBytes(16).toString('hex'), ahora());
     c = db.prepare('SELECT * FROM clientes WHERE telefono = ?').get(tel);
@@ -454,18 +487,40 @@ ruta('GET', '/api/clientes', ({ u, q }) => {
   const c = buscarCliente(q.get('q') || '') || fail(404, 'No hay tarjeta con ese número');
   return { ...tarjetaDe(c), id: c.id, telefono_completo: c.telefono };
 });
+// caja: todos los clientes con su saldo, y la historia de uno
+ruta('GET', '/api/clientes/lista', ({ u }) => {
+  requiere(u);
+  const clientes = db.prepare(`SELECT c.id, c.nombre, c.telefono, c.creado, COALESCE(SUM(s.cantidad), 0) sellos,
+      COALESCE(SUM(s.tipo = 'sello'), 0) compras, COALESCE(SUM(s.tipo = 'canje'), 0) canjes, MAX(s.fecha) ultima
+    FROM clientes c LEFT JOIN sellos s ON s.cliente_id = c.id GROUP BY c.id ORDER BY ultima IS NULL, ultima DESC, c.id DESC`).all();
+  const mes = hoy().slice(0, 7);
+  const r = db.prepare(`SELECT COALESCE(SUM(tipo = 'sello'), 0) sellos, COALESCE(SUM(tipo = 'canje'), 0) canjes FROM sellos WHERE substr(fecha, 1, 7) = ?`).get(mes);
+  return { meta: SELLOS_META, descuento: PREMIO_DESCUENTO, mes: { sellos: r.sellos, canjes: r.canjes },
+    clientes: clientes.map(c => ({ ...c, premio: c.sellos >= SELLOS_META })) };
+});
+ruta('GET', '/api/clientes/(\\d+)', ({ u, p }) => {
+  requiere(u);
+  const c = db.prepare('SELECT id, nombre, telefono, creado FROM clientes WHERE id = ?').get(Number(p[1])) || fail(404, 'Cliente no encontrado');
+  const historial = db.prepare(`SELECT s.fecha, s.tipo, s.cantidad, s.icono, v.id venta_id, v.total, v.premio, v.descuento
+    FROM sellos s LEFT JOIN ventas v ON v.id = s.venta_id WHERE s.cliente_id = ? ORDER BY s.id DESC LIMIT 60`).all(c.id);
+  return { ...c, sellos: saldoSellos(c.id), meta: SELLOS_META, iconos: iconosSellos(c.id), historial };
+});
 ruta('GET', '/api/usuarios-login', () => db.prepare('SELECT usuario, nombre FROM usuarios WHERE activo = 1 ORDER BY rol, nombre').all());
 ruta('GET', '/api/sesion', ({ u }) => (requiere(u), u));
 ruta('POST', '/api/login', ({ body, req, res }) => {
   const ip = clientIp(req), t = Date.now();
   const lista = (intentos.get(ip) || []).filter(x => t - x < 60_000);
   if (lista.length >= 6) fail(429, 'Demasiados intentos. Espera un minuto.');
-  const row = db.prepare('SELECT * FROM usuarios WHERE usuario = ? AND activo = 1').get(String(body?.usuario || ''));
+  const usuario = String(body?.usuario || '').slice(0, 40);
+  const fu = (fallosUsuario.get(usuario) || []).filter(x => t - x < 3600_000);
+  if (fu.length >= 30) fail(429, 'Este usuario quedó bloqueado un rato por muchos intentos fallidos.');
+  const row = db.prepare('SELECT * FROM usuarios WHERE usuario = ? AND activo = 1').get(usuario);
   if (!row || !checkPin(String(body?.pin || ''), row.pin_hash)) {
     lista.push(t); intentos.set(ip, lista);
+    fu.push(t); fallosUsuario.set(usuario, fu);
     fail(401, 'Usuario o PIN incorrecto');
   }
-  intentos.delete(ip);
+  intentos.delete(ip); fallosUsuario.delete(usuario);
   const sid = randomBytes(24).toString('hex');
   db.prepare('INSERT INTO sesiones (token, usuario_id, exp) VALUES (?,?,?)').run(sid, row.id, t + SESION_MS);
   const segura = TRAS_PROXY && req.headers['x-forwarded-proto'] === 'https' ? '; Secure' : '';
@@ -546,6 +601,15 @@ ruta('GET', '/api/qr', ({ u, q }) => {
   let base;
   try { base = new URL(q.get('url') || ''); } catch { fail(400, 'Dirección del menú inválida'); }
   if (!/^https?:$/.test(base.protocol) || base.href.length > 200) fail(400, 'Dirección del menú inválida');
+  if (base.hostname === 'localhost' || base.hostname === '127.0.0.1') {
+    const ip = Object.values(networkInterfaces()).flat().find(i => i && i.family === 'IPv4' && !i.internal)?.address;
+    if (ip) base.hostname = ip;
+  }
+  if (q.get('tipo') === 'tarjeta') {
+    const url = new URL('tarjeta', base.href.replace(/\/?$/, '/'));
+    const svg = QRsvg.render(QR.create(url.href, { errorCorrectionLevel: 'M' }), { margin: 0, color: { dark: '#000000ff', light: '#ffffffff' } });
+    return [{ tipo: 'tarjeta', titulo: 'tarjeta de sellos', subtitulo: 'escanea y saca tu tarjeta · 8 sellos = premio', url: url.href, svg }];
+  }
   const mesas = num(q.get('mesas'), { min: 1, max: 60, int: true }) ?? fail(400, 'Número de mesas inválido (1 a 60)');
   return Array.from({ length: mesas }, (_, i) => {
     const url = new URL(base); url.searchParams.set('mesa', i + 1);
@@ -557,7 +621,15 @@ ruta('GET', '/api/respaldo', ({ u }) => {
   requiere(u, 'admin');
   const f = join(tmpdir(), `lacentral-respaldo-${Date.now()}.db`);
   db.exec(`VACUUM INTO '${f.replace(/'/g, "''")}'`);
+  ajuste.set('ultimo_respaldo_descargado', ahora());
   return { __archivo: f, nombre: `lacentral-respaldo-${hoy()}.db` };
+});
+// el dueño ve un aviso si lleva más de 7 días sin bajar una copia a su computador
+ruta('GET', '/api/respaldo/estado', ({ u }) => {
+  requiere(u, 'admin');
+  const ultimo = ajuste.get('ultimo_respaldo_descargado');
+  const dias = ultimo ? Math.floor((Date.parse(hoy()) - Date.parse(ultimo.slice(0, 10))) / 86400000) : null;
+  return { ultimo, dias, pendiente: dias === null || dias > 7 };
 });
 ruta('PUT', '/api/productos/([a-z0-9-]+)/receta', ({ u, p, body }) => {
   requiere(u, 'admin');
@@ -575,45 +647,83 @@ ruta('PUT', '/api/productos/([a-z0-9-]+)/receta', ({ u, p, body }) => {
   });
 });
 ruta('GET', '/api/usuarios', ({ u }) => (requiere(u, 'admin'), db.prepare('SELECT id, usuario, nombre, rol, activo FROM usuarios').all()));
-ruta('PUT', '/api/usuarios/(\\d+)/pin', ({ u, p, body }) => {
+ruta('PUT', '/api/usuarios/(\\d+)/pin', ({ u, p, body, req }) => {
   requiere(u);
   const id = Number(p[1]);
   if (u.rol !== 'admin' && u.id !== id) fail(403, 'Solo puedes cambiar tu propio PIN');
   const pin = String(body?.pin || '');
   if (!/^\d{4,8}$/.test(pin)) fail(400, 'El PIN debe tener de 4 a 8 números');
+  const destino = db.prepare('SELECT rol FROM usuarios WHERE id = ?').get(id) || fail(404, 'Usuario no encontrado');
+  if (destino.rol === 'admin' && pin.length < 6) fail(400, 'El PIN del dueño debe tener al menos 6 números');
+  // PIN fáciles de adivinar: todos iguales (1111) o seguidos (1234, 9876)
+  const seguidos = d => [...pin].every((c, i) => i === 0 || +c === (+pin[i - 1] + d + 10) % 10);
+  if (/^(\d)\1+$/.test(pin) || seguidos(1) || seguidos(-1)) fail(400, 'Ese PIN es muy fácil de adivinar. Usa otro.');
   db.prepare('UPDATE usuarios SET pin_hash = ? WHERE id = ?').run(hashPin(pin), id);
+  // al cambiar el PIN se cierran las demás sesiones abiertas de ese usuario
+  const sid = /(?:^|;\s*)sid=([a-f0-9]{48})/.exec(req.headers.cookie || '')?.[1] || '';
+  db.prepare('DELETE FROM sesiones WHERE usuario_id = ? AND token != ?').run(id, sid);
   return { ok: true };
 });
 
 // ---------- estáticos ----------
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.webp': 'image/webp', '.ico': 'image/x-icon',
-  '.json': 'application/json', '.glb': 'model/gltf-binary', '.ttf': 'font/ttf', '.webmanifest': 'application/manifest+json' };
+  '.json': 'application/json', '.glb': 'model/gltf-binary', '.ttf': 'font/ttf', '.webmanifest': 'application/manifest+json',
+  '.mp4': 'video/mp4', '.webm': 'video/webm', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg' };
 
-async function estatico(res, root, rel) {
-  const file = normalize(join(root, decodeURIComponent(rel)));
+async function estatico(res, root, rel, req) {
+  let dec;
+  try { dec = decodeURIComponent(rel); } catch { return false; }
+  if (dec.includes('\0')) return false;
+  const file = normalize(join(root, dec));
   if (!file.startsWith(root)) return false;              // evita salir de la carpeta (../)
   let f = file;
   try { if ((await stat(f)).isDirectory()) f = join(f, 'index.html'); } catch { return false; }
+  if (f.includes('_poster')) return false;
+  const tipo = MIME[extname(f)] || 'application/octet-stream';
+  const cache = /\.(glb|webp|ttf|svg|mp4|webm|jpg)$/.test(f) ? 'public, max-age=86400' : 'no-cache';
+  // videos: se mandan por partes (Range). Safari en iPhone no reproduce un video si el servidor no lo permite.
+  if (/^video\//.test(tipo)) {
+    let tam;
+    try { tam = (await stat(f)).size; } catch { return false; }
+    const m = /^bytes=(\d*)-(\d*)$/.exec(req?.headers.range || '');
+    let ini = 0, fin = tam - 1;
+    if (m) {
+      if (m[1] === '') { ini = Math.max(0, tam - Number(m[2])); }        // bytes=-N: los últimos N
+      else { ini = Number(m[1]); if (m[2] !== '') fin = Math.min(Number(m[2]), tam - 1); }
+      if (ini > fin || ini >= tam) { res.writeHead(416, { 'Content-Range': `bytes */${tam}` }); res.end(); return true; }
+    }
+    res.writeHead(m ? 206 : 200, { 'Content-Type': tipo, 'Cache-Control': cache, 'Accept-Ranges': 'bytes',
+      'Content-Length': fin - ini + 1, ...(m ? { 'Content-Range': `bytes ${ini}-${fin}/${tam}` } : {}) });
+    if (req?.method === 'HEAD') { res.end(); return true; }
+    createReadStream(f, { start: ini, end: fin }).on('error', () => res.destroy()).pipe(res);
+    return true;
+  }
   try {
     const data = await readFile(f);
-    if (f.includes('_poster')) return false;
-    res.writeHead(200, { 'Content-Type': MIME[extname(f)] || 'application/octet-stream',
-      'Cache-Control': /\.(glb|webp|ttf|svg)$/.test(f) ? 'public, max-age=86400' : 'no-cache' });
+    res.writeHead(200, { 'Content-Type': tipo, 'Cache-Control': cache });
     res.end(data);
     return true;
   } catch { return false; }
 }
 
 // ---------- servidor ----------
-createServer(async (req, res) => {
+const servidor = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'same-origin');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Content-Security-Policy', "frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'");
+  if (TRAS_PROXY && req.headers['x-forwarded-proto'] === 'https') res.setHeader('Strict-Transport-Security', 'max-age=31536000');
   try {
     if (url.pathname.startsWith('/api/')) {
       // las escrituras deben venir del mismo origen (protección CSRF)
-      if (req.method !== 'GET' && req.headers.origin && new URL(req.headers.origin).host !== req.headers.host) fail(403, 'Origen no permitido');
+      if (req.method !== 'GET') {
+        let origen = null;
+        try { origen = req.headers.origin ? new URL(req.headers.origin).host : null; } catch { fail(403, 'Origen no permitido'); }
+        if (origen && origen !== req.headers.host) fail(403, 'Origen no permitido');
+        if (req.headers['sec-fetch-site'] === 'cross-site') fail(403, 'Origen no permitido');
+      }
       const r = rutas.find(r => r.m === req.method && r.re.test(url.pathname)) || fail(404, 'No encontrado');
       let body = null;
       if (req.method !== 'GET') {
@@ -627,13 +737,13 @@ createServer(async (req, res) => {
         res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Disposition': `attachment; filename="${out.nombre}"`, 'Cache-Control': 'no-store' });
         return res.end(data);
       }
-      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store, private' });
       return res.end(JSON.stringify(out));
     }
     if (url.pathname === '/caja' || url.pathname === '/comanda' || url.pathname === '/comanda/') { res.writeHead(301, { Location: '/caja/' }); return res.end(); }
     if (url.pathname === '/tarjeta' || url.pathname === '/tarjeta/') { res.writeHead(301, { Location: '/tarjeta.html' + url.search }); return res.end(); }
-    if (url.pathname.startsWith('/caja/') && await estatico(res, ROOT_APP, url.pathname.slice(6))) return;
-    if (!url.pathname.startsWith('/caja/') && await estatico(res, ROOT_MENU, url.pathname.slice(1))) return;
+    if (url.pathname.startsWith('/caja/') && await estatico(res, ROOT_APP, url.pathname.slice(6), req)) return;
+    if (!url.pathname.startsWith('/caja/') && await estatico(res, ROOT_MENU, url.pathname.slice(1), req)) return;
     res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); res.end('No encontrado');
   } catch (e) {
     const status = e instanceof HttpError ? e.status : 500;
@@ -641,7 +751,16 @@ createServer(async (req, res) => {
     if (!res.headersSent) res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
     res.end(JSON.stringify({ error: status === 500 ? 'Error interno' : e.message }));
   }
-}).listen(PORT, () => {
+});
+// conexiones lentas a propósito (slowloris) no pueden dejar al servidor sin cupo
+servidor.headersTimeout = 15_000;
+servidor.requestTimeout = 30_000;
+// apagado ordenado: termina lo que está en curso y cierra la base sin perder lo último escrito
+for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => {
+  servidor.close(() => { cerrarBase(); process.exit(0); });
+  setTimeout(() => { cerrarBase(); process.exit(0); }, 5000).unref();
+});
+servidor.listen(PORT, () => {
   const ips = Object.values(networkInterfaces()).flat().filter(i => i && i.family === 'IPv4' && !i.internal).map(i => i.address);
   console.log(`
   La Central lista. Deja esta ventana abierta.

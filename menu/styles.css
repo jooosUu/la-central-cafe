@@ -388,14 +388,6 @@ dialog#cart-drawer[open] { display: flex; animation: slideInDrawer .28s cubic-be
 .btn-review-pill:hover .pill-star { color: var(--bg); }
 .btn-review-pill:active { transform: scale(.95); }
 
-.btn-caja-staff {
-  display: inline-flex; align-items: center; gap: 5px;
-  font: 800 12px/1 Utendo, system-ui, sans-serif; text-decoration: none; color: var(--mute);
-  padding: 7px 11px; border: 1.5px solid #DDD; border-radius: 99px;
-  background: var(--bg); transition: all .15s; white-space: nowrap; flex: none;
-}
-.btn-caja-staff:hover { border-color: var(--ink); color: var(--ink); }
-.btn-caja-staff:active { transform: scale(.95); }
 
 /* ---------- sección social hub & google maps ---------- */
 .social-hub { padding: var(--s6) var(--pad) var(--s4); }
@@ -637,8 +629,7 @@ html[data-modo="parrilla"] .ambiente i { display: none; }
 
 /* cabecera sobre rojo */
 html[data-modo="parrilla"] .top { padding-bottom: 0; }
-html[data-modo="parrilla"] .btn-lang,
-html[data-modo="parrilla"] .btn-caja-staff { background: transparent; color: #0C0A09; border-color: #0C0A09; }
+html[data-modo="parrilla"] .btn-lang { background: transparent; color: #0C0A09; border-color: #0C0A09; }
 html[data-modo="parrilla"] .logo svg { color: #0C0A09; }
 html[data-modo="parrilla"] .logo svg path[fill="#fff"] { fill: var(--fuego); }
 
@@ -661,8 +652,7 @@ html[data-modo="parrilla"] .intro { background-color: #0C0A09; }
 html[data-modo="parrilla"] .intro { position: relative; isolation: isolate; background-image: none; }
 html[data-modo="parrilla"] .logo svg { color: var(--ink); }
 html[data-modo="parrilla"] .logo svg path[fill="#fff"] { fill: #0C0A09; }
-html[data-modo="parrilla"] .btn-lang,
-html[data-modo="parrilla"] .btn-caja-staff { color: var(--ink); border-color: var(--ink); }
+html[data-modo="parrilla"] .btn-lang { color: var(--ink); border-color: var(--ink); }
 html[data-modo="parrilla"] .noche-kicker { color: var(--mute); }
 /* la llama de la gota: marca pequeña crema encima de la palabra */
 html[data-modo="parrilla"] .noche-llama { order: 1; width: clamp(54px, 13vw, 84px); margin: var(--s5) auto 0; padding: 0;
@@ -781,3 +771,19 @@ html[data-modo="parrilla"] .cart-total-badge { font: italic 400 17px/1 var(--ser
 .granos { position: absolute; display: block; pointer-events: auto; touch-action: pan-y; cursor: crosshair; }
 html.granos-on:not([data-modo="parrilla"]) .intro-t { color: transparent; }
 html[data-modo="parrilla"] .granos { display: none; }
+
+/* =================================================================
+   VIDEO DE FONDO (ver video.js): de noche, la parrilla de verdad queda fija detrás de toda la carta,
+   oscurecida para que se lea bien. La portada de llamas sigue igual (negra, tapa el video).
+   ================================================================= */
+.fondo-video { display: none; }
+html[data-modo="parrilla"] .fondo-video { display: block; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background: #0C0A09 center / cover no-repeat; }
+.fondo-video video { display: block; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity 1.5s ease; }
+.fondo-video video.andando { opacity: 1; }
+.fondo-video::after { content: ""; position: absolute; inset: 0;
+  background: linear-gradient(to bottom, rgba(12, 10, 9, .8), rgba(12, 10, 9, .86)); }
+html[data-modo="parrilla"] body { background: transparent; }
+/* la portada tapa el video y se funde en negro hacia abajo */
+html[data-modo="parrilla"] .intro { background-color: #0C0A09; box-shadow: 0 80px 70px -10px #0C0A09; }
+@media (prefers-reduced-motion: reduce) { .fondo-video video { transition: none; } }

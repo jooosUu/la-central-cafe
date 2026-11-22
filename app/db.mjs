@@ -10,7 +10,15 @@ const DATA = process.env.LACENTRAL_DATA
   : new URL('./data/', import.meta.url);
 mkdirSync(DATA, { recursive: true });
 export const db = new DatabaseSync(process.env.LACENTRAL_DB || fileURLToPath(new URL('lacentral.db', DATA)));
-db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
+db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
+
+// cierre ordenado (Render manda SIGTERM al publicar): se vuelca el WAL al archivo principal y se cierra la base
+let cerrada = false;
+export function cerrarBase() {
+  if (cerrada) return;
+  cerrada = true;
+  try { db.exec('PRAGMA wal_checkpoint(TRUNCATE)'); db.close(); } catch {}
+}
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS usuarios (
@@ -152,7 +160,27 @@ export function seed() {
 }
 
 // ---------- migraciones (se aplican sobre bases existentes sin perder datos) ----------
+// versión del esquema: cuando sube, antes de tocar la base se guarda una copia completa (respaldos/antes-migracion-…)
+const ESQUEMA = 3;
 export function migrar() {
+  const v = db.prepare('PRAGMA user_version').get().user_version;
+  const hayDatos = db.prepare(`SELECT COUNT(*) n FROM sqlite_master WHERE type = 'table' AND name = 'ventas'`).get().n > 0;
+  if (v < ESQUEMA && hayDatos && !process.env.LACENTRAL_DB) {
+    const dir = new URL('respaldos/', DATA);
+    mkdirSync(dir, { recursive: true });
+    const destino = fileURLToPath(new URL(`antes-migracion-v${v}-${fechaBogota()}-${Date.now()}.db`, dir));
+    db.exec(`VACUUM INTO '${destino.replace(/'/g, "''")}'`);
+    console.log('  Copia antes de actualizar la base: ' + destino);
+  }
+  migrarEsquema();
+  db.exec(`CREATE TABLE IF NOT EXISTS ajustes (clave TEXT PRIMARY KEY, valor TEXT)`);
+  if (v < ESQUEMA) db.exec(`PRAGMA user_version = ${ESQUEMA}`);
+}
+export const ajuste = {
+  get: k => db.prepare('SELECT valor FROM ajustes WHERE clave = ?').get(k)?.valor ?? null,
+  set: (k, val) => db.prepare('INSERT INTO ajustes (clave, valor) VALUES (?, ?) ON CONFLICT(clave) DO UPDATE SET valor = excluded.valor').run(k, String(val)),
+};
+function migrarEsquema() {
   const cols = db.prepare('PRAGMA table_info(productos)').all().map(c => c.name);
   if (!cols.includes('descripcion')) db.exec('ALTER TABLE productos ADD COLUMN descripcion TEXT');
   if (!cols.includes('modelo')) db.exec('ALTER TABLE productos ADD COLUMN modelo TEXT');
@@ -199,6 +227,8 @@ function migrarFidelizacion() {
     venta_id INTEGER REFERENCES ventas(id), fecha TEXT NOT NULL, cantidad INTEGER NOT NULL,
     tipo TEXT NOT NULL CHECK (tipo IN ('sello','canje')))`);
   db.exec('CREATE INDEX IF NOT EXISTS ix_sellos_cliente ON sellos(cliente_id)');
+  const scols = db.prepare('PRAGMA table_info(sellos)').all().map(c => c.name);
+  if (!scols.includes('icono')) db.exec(`ALTER TABLE sellos ADD COLUMN icono TEXT NOT NULL DEFAULT 'cafe'`);
   const vcols = db.prepare('PRAGMA table_info(ventas)').all().map(c => c.name);
   if (!vcols.includes('cliente_id')) db.exec('ALTER TABLE ventas ADD COLUMN cliente_id INTEGER REFERENCES clientes(id)');
   if (!vcols.includes('descuento')) db.exec('ALTER TABLE ventas ADD COLUMN descuento INTEGER NOT NULL DEFAULT 0');

@@ -429,22 +429,26 @@ dialog::backdrop { background: rgba(0, 0, 0, .55); }
    Estilo recibo: letra de máquina en mayúsculas, todo centrado, marca arriba y mancha de tinta abajo. */
 @font-face { font-family: 'Space Mono'; src: url(/fonts/SpaceMono-Regular.ttf); font-weight: 400; font-display: swap; }
 @font-face { font-family: 'Space Mono'; src: url(/fonts/SpaceMono-Bold.ttf); font-weight: 700; font-display: swap; }
-.ticket-termico { width: 68mm; color: #000; background: #fff; font: 400 10.5px/1.45 'Space Mono', 'Courier New', monospace; letter-spacing: .02em; }
+.ticket-termico { width: 100%; max-width: 68mm; margin: 0 auto; color: #000; background: #fff; font: 400 10.5px/1.45 'Space Mono', 'Courier New', monospace; letter-spacing: .02em; }
 .ticket-termico img { display: block; margin: 0 auto; }
-.tk-marca { width: 13mm; margin-top: 2mm !important; }
-.tk-logo { width: 62%; margin-top: 3mm !important; }
-.tk-titulo { text-align: center; font-size: 13px; line-height: 1.35; margin-top: 5mm; letter-spacing: .04em; }
+.tk-cabeza { width: 40mm; margin-top: 1mm !important; }
+.tk-logo { width: 74%; margin-top: 1mm !important; }
+.tk-titulo { text-align: center; font-size: 15px; line-height: 1.3; margin-top: 5mm; letter-spacing: .12em; }
 .tk-datos { margin-top: 5mm; font-size: 9.5px; }
-.tk-items { margin-top: 5mm; }
+.tk-items { margin-top: 6mm; position: relative; isolation: isolate; min-height: 22mm; }
+.tk-items .tk-fila { position: relative; z-index: 1; }
+/* marca de agua de puntos sueltos detrás de los productos (la térmica no imprime grises: son puntos) */
+.ticket-termico .tk-agua { position: absolute; z-index: 0; left: 50%; top: 50%; width: 46mm; transform: translate(-50%, -50%); margin: 0 !important; pointer-events: none; }
 .tk-fila { display: flex; justify-content: space-between; gap: 8px; }
 .tk-fila span:first-child { min-width: 0; }
 .tk-fila span:last-child { flex: none; font-variant-numeric: tabular-nums; }
-.tk-total { margin-top: 5mm; font-size: 13px; font-weight: 700; }
+.tk-total { margin-top: 6mm; font-size: 16px; font-weight: 700; letter-spacing: .04em; }
 .tk-aviso { text-align: center; font-size: 9px; margin-top: 3mm; }
 .tk-pie2 { margin-top: 6mm; font-size: 9.5px; }
-.tk-gracias { text-align: center; font-weight: 700; margin-top: 6mm; }
+.tk-gracias { text-align: center; font-weight: 700; font-size: 12px; letter-spacing: .1em; margin-top: 7mm; }
 .tk-pie { text-align: center; font-size: 8.5px; margin-top: 1mm; }
-.tk-mancha { width: 40mm; margin-top: 5mm !important; filter: blur(1.6px); opacity: .9; }
+/* arte de aerosol a todo el ancho al final del papel (fuego de noche / granos de día) */
+.ticket-termico .tk-pie-arte { width: 100%; margin-top: 4mm !important; }
 
 @media print {
   body * { visibility: hidden !important; }
@@ -486,7 +490,14 @@ dialog::backdrop { background: rgba(0, 0, 0, .55); }
 .sellos-bolitas { display: inline-flex; gap: 4px; flex: 1; }
 .sellos-bolitas i { width: 11px; height: 15px; border-radius: 50%; border: 2px solid var(--ink); }
 .sellos-bolitas i.on { background: var(--ink); }
+.sellos-bolitas i.on.fuego { background: #E4411F; border-color: #E4411F; }
 .sellos-premio { font-weight: 800; margin: 8px 0 0; }
 .sellos-ok { margin-top: 10px; font-weight: 800; }
 .tk-sellos { margin: 10px 0 4px; padding: 8px 0; border-top: 1px dashed #000; border-bottom: 1px dashed #000; text-align: center; line-height: 1.5; }
 .tk-granos { font-size: 1.35em; letter-spacing: .05em; }
+
+/* ---------- clientes ---------- */
+.cli-fila { cursor: pointer; }
+.cli-fila:hover, .cli-fila:focus-visible { background: var(--soft); }
+.cli-premio { display: inline-block; background: var(--ink); color: var(--bg); border-radius: 99px; padding: 1px 8px; font-size: 11px; font-weight: 800; vertical-align: 1px; }
+.tot-desc { display: block; font-size: 13px; font-weight: 800; text-align: right; }

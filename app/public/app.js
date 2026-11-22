@@ -18,9 +18,9 @@ function activarModoDemo() {
 if (ES_DEMO_HOST) activarModoDemo();
 
 const SEED_USUARIOS = [
-  { id: 1, usuario: 'dueno', nombre: 'Dueño', rol: 'admin', pin: '1234' },
-  { id: 2, usuario: 'caja1', nombre: 'Caja 1', rol: 'cajero', pin: '1111' },
-  { id: 3, usuario: 'caja2', nombre: 'Caja 2', rol: 'cajero', pin: '1699' }
+  { id: 1, usuario: 'dueno', nombre: 'Dueño', rol: 'admin' },
+  { id: 2, usuario: 'caja1', nombre: 'Caja 1', rol: 'cajero' },
+  { id: 3, usuario: 'caja2', nombre: 'Caja 2', rol: 'cajero' }
 ];
 
 const SEED_CATEGORIAS = [
@@ -138,9 +138,8 @@ async function mockApi(method, path, body) {
     const u = SEED_USUARIOS.find(x => x.usuario === body?.usuario);
     if (!u) throw new Error('Usuario inválido');
     const p = String(body?.pin || '');
-    if (p !== u.pin && p !== '1234' && p !== '6225' && p !== '1111' && p !== '1457') {
-      throw new Error('PIN incorrecto (en demo usa 1234)');
-    }
+    // demo: los datos viven solo en este navegador; nunca poner aquí los PIN reales
+    if (!/^\d{4,8}$/.test(p)) throw new Error('En la demo entra con cualquier PIN de 4 números');
     const session = { id: u.id, usuario: u.usuario, nombre: u.nombre, rol: u.rol };
     localStorage.setItem('lc_demo_u', JSON.stringify(session));
     return session;
@@ -462,7 +461,7 @@ function generarTicketHtml(venta) {
   const fila = (izq, der, cls = '') => `<div class="tk-fila ${cls}"><span>${izq}</span><span>${der}</span></div>`;
   return `
     <div class="ticket-termico${noche ? ' tk-noche' : ''}">
-      <img class="tk-marca" src="${noche ? '/img/llama.svg?v=3' : '/img/taza.svg'}" alt="">
+      <img class="tk-cabeza" src="/img/tk-${noche ? 'noche' : 'dia'}-cabeza.svg?v=1" alt="">
       <img class="tk-logo" src="/img/logo-horizontal.svg?v=3" alt="la central · tunja">
       <div class="tk-titulo">LA CENTRAL · TUNJA<br>${noche ? 'PARRILLA DE NOCHE' : 'CAFÉ DE ORIGEN'}</div>
 
@@ -474,6 +473,7 @@ function generarTicketHtml(venta) {
       </div>
 
       <div class="tk-items">
+        <img class="tk-agua" src="/img/tk-${noche ? 'noche' : 'dia'}-agua.svg?v=2" alt="">
         ${items.map(it => {
           const c = it.cantidad || 1, pu = it.precio || 0;
           return fila(`${c}X ${esc(String(it.nombre || it.producto_id).toUpperCase())}`, cop(pu * c));
@@ -495,13 +495,13 @@ function generarTicketHtml(venta) {
 
       ${venta.tarjeta ? `<div class="tk-sellos">
         <div>TARJETA DE SELLOS · ${esc(String(venta.tarjeta.nombre).toUpperCase())}</div>
-        <div class="tk-granos">${Array.from({ length: venta.tarjeta.meta }, (_, i) => i < Math.min(venta.tarjeta.sellos, venta.tarjeta.meta) ? '●' : '○').join(' ')}</div>
+        <div class="tk-granos">${Array.from({ length: venta.tarjeta.meta }, (_, i) => i < Math.min(venta.tarjeta.sellos, venta.tarjeta.meta) ? (venta.tarjeta.iconos?.[i] === 'fuego' ? '▲' : '●') : '○').join(' ')}</div>
         <div>${venta.tarjeta.sellos >= venta.tarjeta.meta ? '¡PREMIO EN TU PRÓXIMA COMPRA!' : `${venta.tarjeta.sellos} DE ${venta.tarjeta.meta} · TE FALTAN ${venta.tarjeta.meta - venta.tarjeta.sellos}`}</div>
       </div>` : ''}
       <div class="tk-gracias">${noche ? 'GRACIAS POR VENIR AL FUEGO' : 'GRACIAS POR TU VISITA'}</div>
       <div class="tk-pie">@LACENTRAL.TUNJA</div>
       <div class="tk-pie">COMPROBANTE DE VENTA · NO ES FACTURA ELECTRÓNICA</div>
-      ${noche ? '<img class="tk-mancha" src="/img/llama.svg?v=3" alt="">' : ''}
+      <img class="tk-pie-arte" src="/img/tk-${noche ? 'noche' : 'dia'}-pie.svg?v=1" alt="">
     </div>
   `;
 }
@@ -510,7 +510,9 @@ function imprimirTicket(venta) {
   const printArea = $('#ticket-print');
   if (!printArea) return;
   printArea.innerHTML = generarTicketHtml(venta);
-  imprimirConModo('ticket');
+  // esperar a que carguen los dibujos (llama/taza, marca de agua, pie); si tardan, imprime igual a los 2 s
+  const imgs = [...printArea.querySelectorAll('img')].map(i => i.complete ? null : new Promise(r => { i.onload = i.onerror = r; })).filter(Boolean);
+  Promise.race([Promise.all(imgs), new Promise(r => setTimeout(r, 2000))]).then(() => imprimirConModo('ticket'));
 }
 
 function compartirTicketWhatsApp(venta) {
@@ -692,10 +694,14 @@ async function iniciar() {
   $('#yo').textContent = S.u.nombre + (S.u.rol === 'admin' ? ' · admin' : '');
   await cargar();
   if (!location.hash) location.hash = '#vender'; else router();
+  if (S.u.rol === 'admin' && !modoDemo) api('GET', '/respaldo/estado').then(r => {
+    if (r.pendiente) toast(r.dias === null ? 'Aún no has descargado una copia de seguridad a tu computador: ajustes → descargar copia.'
+      : `Hace ${r.dias} días no descargas una copia de seguridad: ajustes → descargar copia.`, 'warn');
+  }).catch(() => {});
 }
 
 // ---------- router ----------
-const VISTAS = { vender, mesas, cocina, inventario, reportes, ajustes };
+const VISTAS = { vender, mesas, cocina, inventario, clientes, reportes, ajustes };
 function router() {
   if (!S.u) return;
   const v = location.hash.slice(1) in VISTAS ? location.hash.slice(1) : 'vender';
@@ -704,6 +710,70 @@ function router() {
   $('#vista').focus({ preventScroll: true });
 }
 addEventListener('hashchange', router);
+
+// =================================================================== CLIENTES (tarjeta de sellos)
+let filtroCli = '', filtroPremio = false;
+async function clientes() {
+  $('#vista').innerHTML = `<section class="pagina"><header class="p-head"><h1>clientes</h1></header><hr class="regla"><p class="muted">Cargando…</p></section>`;
+  let d;
+  try { d = await api('GET', '/clientes/lista'); }
+  catch (err) { $('#vista').innerHTML = `<section class="pagina"><header class="p-head"><h1>clientes</h1></header><hr class="regla"><p class="vacio">${esc(err.message)}</p></section>`; return; }
+  const bolitas = (n, iconos = []) => `<span class="sellos-bolitas">${Array.from({ length: d.meta }, (_, i) =>
+    `<i class="${i < Math.min(n, d.meta) ? ('on' + (iconos?.[i] === 'fuego' ? ' fuego' : '')) : ''}"></i>`).join('')}</span>`;
+  const conPremio = d.clientes.filter(c => c.premio).length;
+  const pintar = () => {
+    const q = filtroCli.toLowerCase().replace(/\s/g, '');
+    const lista = d.clientes.filter(c => (!filtroPremio || c.premio) && (!q || c.nombre.toLowerCase().includes(q) || c.telefono.includes(q)));
+    $('#cli-tabla').innerHTML = lista.length ? lista.map(c => `
+      <tr data-cli="${c.id}" tabindex="0" class="cli-fila">
+        <td><b>${esc(c.nombre)}</b>${c.premio ? ' <span class="cli-premio">premio</span>' : ''}<br><small class="muted">${esc(c.telefono.replace(/(\d{3})(\d{3})(\d+)/, '$1 $2 $3'))}</small></td>
+        <td>${bolitas(c.sellos)} <small>${Math.min(c.sellos, d.meta)}/${d.meta}</small></td>
+        <td class="n">${c.compras}</td><td class="n">${c.canjes}</td>
+        <td>${c.ultima ? esc(c.ultima.slice(0, 10).split('-').reverse().join('/')) : '<span class="muted">sin compras</span>'}</td>
+      </tr>`).join('') : `<tr><td colspan="5" class="vacio">${d.clientes.length ? 'Nadie coincide con la búsqueda.' : 'Aún no hay tarjetas. Los clientes la sacan en el menú → tarjeta de sellos.'}</td></tr>`;
+  };
+  $('#vista').innerHTML = `
+  <section class="pagina">
+    <header class="p-head"><h1>clientes</h1>${S.u.rol === 'admin' ? '<div class="p-acc"><button class="btn btn-sm" id="btn-qr-tj">QR tarjeta de sellos</button></div>' : ''}</header>
+    <hr class="regla">
+    <div class="kpis kpis-4">
+      <div class="kpi kpi-hero"><span>tarjetas</span><b>${d.clientes.length}</b></div>
+      <div class="kpi"><span>con premio pendiente</span><b>${conPremio}</b></div>
+      <div class="kpi"><span>sellos este mes</span><b>${d.mes.sellos}</b></div>
+      <div class="kpi"><span>premios canjeados este mes</span><b>${d.mes.canjes}</b></div>
+    </div>
+    <div class="filtros">
+      <label class="buscar"><span class="sr">Buscar cliente</span><input id="cli-q" type="search" placeholder="nombre o celular" value="${esc(filtroCli)}"></label>
+      <button class="chip" id="cli-premio" aria-pressed="${filtroPremio}">solo con premio</button>
+    </div>
+    <p class="muted">${d.meta} sellos = café gratis o ${d.descuento}% de descuento. Cada compra con el celular del cliente suma 1 sello.</p>
+    <div class="scroll-x"><table class="tabla"><thead><tr><th>cliente</th><th>sellos</th><th class="n">compras</th><th class="n">premios</th><th>última visita</th></tr></thead>
+      <tbody id="cli-tabla"></tbody></table></div>
+  </section>`;
+  pintar();
+  $('#cli-q').oninput = e => { filtroCli = e.target.value; pintar(); };
+  $('#cli-premio').onclick = e => { filtroPremio = !filtroPremio; e.target.setAttribute('aria-pressed', filtroPremio); pintar(); };
+  const abrir = async id => {
+    const c = await api('GET', '/clientes/' + id).catch(err => (toast(err.message, 'warn'), null));
+    if (!c) return;
+    const nombres = { sello: 'sello', canje: 'premio canjeado' };
+    abrirModal(esc(c.nombre), `
+      <p class="muted">${esc(c.telefono)} · tarjeta desde ${esc(c.creado.slice(0, 10).split('-').reverse().join('/'))}</p>
+      <div class="sellos-fila" style="margin:12px 0;">${bolitas(c.sellos, c.iconos)}<b>${Math.min(c.sellos, c.meta)}/${c.meta}</b></div>
+      ${c.sellos >= c.meta ? '<p class="sellos-premio">Tiene premio: café gratis o descuento en su próxima compra.</p>' : ''}
+      <div class="scroll-x"><table class="tabla"><thead><tr><th>fecha</th><th>movimiento</th><th class="n">venta</th></tr></thead><tbody>
+      ${c.historial.map(h => `<tr><td>${esc(h.fecha.slice(0, 16).replace('T', ' '))}</td>
+        <td>${h.tipo === 'sello' ? `sello (${h.icono === 'fuego' ? 'fuego' : 'café'})` : nombres[h.tipo]} <b>${h.cantidad > 0 ? '+' : ''}${h.cantidad}</b>${h.tipo === 'canje' && h.descuento ? ` <small class="muted">(${h.premio === 'cafe' ? 'café gratis' : 'descuento'} −${cop(h.descuento)})</small>` : ''}</td>
+        <td class="n">${h.venta_id ? `#${h.venta_id} · ${cop(h.total)}` : ''}</td></tr>`).join('') || '<tr><td colspan="3" class="vacio">Sin movimientos.</td></tr>'}
+      </tbody></table></div>`, () => true, { ok: 'cerrar' });
+  };
+  $('#cli-tabla').onclick = e => { const tr = e.target.closest('[data-cli]'); if (tr) abrir(tr.dataset.cli); };
+  $('#cli-tabla').onkeydown = e => { const tr = e.target.closest('[data-cli]'); if (tr && e.key === 'Enter') abrir(tr.dataset.cli); };
+  $('#btn-qr-tj')?.addEventListener('click', async () => {
+    try { mostrarQR(await api('GET', `/qr?tipo=tarjeta&url=${encodeURIComponent(location.origin + '/')}`)); }
+    catch (err) { toast(err.message, 'warn'); }
+  });
+}
 
 // =================================================================== MESAS
 function mesas() {
@@ -1038,7 +1108,7 @@ async function cobrar() {
       pago: pagoSelec, recibido: finalRecibido, mesa: S.mesa, propina, comanda_id: S.comanda_id,
       cliente: cliente?.token, premio
     });
-    r.items = itemsVenta; r.mesa = S.mesa; r.propina = propina; r.total = finalTotal;
+    r.items = itemsVenta; r.mesa = S.mesa; r.propina = propina; r.total = finalTotal; r.pago = pagoSelec;
     S.ultimoTicket = r; S.carrito = []; S.recibido = ''; S.comanda_id = null; S.propina = 0;
     await cargar(); vender();
     setTimeout(() => {
@@ -1066,7 +1136,7 @@ async function cobrar() {
   const recalcular = () => {
     descuento = premio === 'cafe' ? precioCafe : premio === 'descuento' ? Math.round(baseTotal * (cliente?.descuento || 10) / 100) : 0;
     total = totalAhora();
-    $('#modal-tot-val').textContent = cop(total) + (descuento ? ` (−${cop(descuento)})` : '');
+    $('#modal-tot-val').innerHTML = cop(total) + (descuento ? `<small class="tot-desc">premio −${cop(descuento)}</small>` : '');
     const recIn = $('#modal-recibido');
     if (recIn) recIn.placeholder = total;
     actCambio();
@@ -1075,7 +1145,7 @@ async function cobrar() {
     const box = $('#sellos-info');
     if (!cliente) { box.innerHTML = ''; return; }
     const puestos = Math.min(cliente.sellos, cliente.meta);
-    const bolitas = Array.from({ length: cliente.meta }, (_, i) => `<i class="${i < puestos ? 'on' : ''}"></i>`).join('');
+    const bolitas = Array.from({ length: cliente.meta }, (_, i) => `<i class="${i < puestos ? ('on' + (cliente.iconos?.[i] === 'fuego' ? ' fuego' : '')) : ''}"></i>`).join('');
     box.innerHTML = `<div class="sellos-fila"><b>${esc(cliente.nombre)}</b><span class="sellos-bolitas">${bolitas}</span><span>${puestos}/${cliente.meta}</span></div>
       ${cliente.premio ? `<p class="sellos-premio">¡Tiene premio! ¿Qué escoge?</p>
         <div class="desc-grid">
@@ -1341,6 +1411,7 @@ async function ajustes() {
       <label class="campo"><span>dirección del menú</span><input name="url" required value="${esc(location.origin + '/')}"></label>
       <label class="campo"><span>mesas</span><input name="mesas" inputmode="numeric" required value="10"></label>
       <button class="btn btn-negro">generar QR</button>
+      <button type="button" class="btn" id="qr-tarjeta">QR tarjeta</button>
     </form>
 
     <h2 class="sub">copia de seguridad</h2>
@@ -1380,6 +1451,11 @@ async function ajustes() {
     try { mostrarQR(await api('GET', `/qr?url=${encodeURIComponent(fd.get('url'))}&mesas=${encodeURIComponent(fd.get('mesas'))}`)); }
     catch (err) { toast(err.message, 'warn'); }
   };
+  $('#qr-tarjeta')?.addEventListener('click', async () => {
+    const fd = new FormData(qf);
+    try { mostrarQR(await api('GET', `/qr?tipo=tarjeta&url=${encodeURIComponent(fd.get('url'))}`)); }
+    catch (err) { toast(err.message, 'warn'); }
+  });
   $$('[data-pin]').forEach(b => b.onclick = () => abrirModal('cambiar PIN',
     '<label class="campo"><span>nuevo PIN (4 a 8 números)</span><input name="pin" inputmode="numeric" pattern="[0-9]{4,8}" required autocomplete="new-password"></label>',
     async fd => { await api('PUT', `/usuarios/${b.dataset.pin}/pin`, { pin: fd.get('pin') }); toast('PIN actualizado'); }));
@@ -1419,11 +1495,12 @@ function nuevaCategoria() {
   async fd => { await api('POST', '/categorias', Object.fromEntries(fd)); await cargar(); ajustes(); toast('Categoría creada'); });
 }
 function mostrarQR(lista) {
-  abrirModal(`QR · ${lista.length} mesas`, `
+  const esTarjeta = lista.length === 1 && lista[0].tipo === 'tarjeta';
+  abrirModal(esTarjeta ? 'QR · tarjeta de sellos' : `QR · ${lista.length} mesas`, `
     <div class="qr-grid imprimible" id="qr-print">${lista.map(q => `
       <figure class="qr-card"><div class="qr-logo" data-svg="/img/logo-horizontal.svg?v=3"></div>
         <div class="qr-code">${q.svg}</div>
-        <figcaption><b>mesa ${q.mesa}</b><span>escanea y mira el menú en 3D</span></figcaption></figure>`).join('')}</div>`,
+        <figcaption><b>${esc(q.titulo || ('mesa ' + q.mesa))}</b><span>${esc(q.subtitulo || 'escanea y mira el menú en 3D')}</span></figcaption></figure>`).join('')}</div>`,
   () => { imprimirConModo('qr'); return false; }, { ok: 'imprimir', ancho: true });
   pintarSVGs($('#qr-print'));
 }

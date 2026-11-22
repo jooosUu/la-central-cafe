@@ -19,7 +19,8 @@
     $('#tj-desc').textContent = `${t.descuento}% de descuento`;
     $('#tj-sellos').innerHTML = Array.from({ length: t.meta }, (_, i) => {
       const lleno = i < enTarjeta, nuevo = lleno && i >= vistos;
-      return `<li class="${lleno ? 'on' : ''}${nuevo ? ' nuevo' : ''}" style="--i:${i}" aria-label="sello ${i + 1}${lleno ? ', puesto' : ''}">
+      const icono = lleno ? (t.iconos?.[i] === 'fuego' ? ' s-fuego' : ' s-cafe') : '';
+      return `<li class="${lleno ? 'on' : ''}${icono}${nuevo ? ' nuevo' : ''}" style="--i:${i}" aria-label="sello ${i + 1}${lleno ? `, ${t.iconos?.[i] === 'fuego' ? 'fuego' : 'café'}` : ''}">
         ${grano(lleno)}<span class="tj-llama"></span><span class="tj-n">${i + 1}</span></li>`;
     }).join('');
     const faltan = t.meta - enTarjeta;
@@ -28,9 +29,9 @@
       : `${enTarjeta} de ${t.meta} · ${faltan === 1 ? 'te falta 1 compra' : `te faltan ${faltan} compras`} para tu premio`;
     $('#tj-premio').hidden = !t.premio;
     $('#tj-card').classList.toggle('completa', !!t.premio);
-    const nombres = { sello: 'sello', canje: 'premio canjeado' };
+    const labelMov = h => h.tipo === 'sello' ? `sello · ${h.icono === 'fuego' ? 'fuego' : 'café'}` : 'premio canjeado';
     $('#tj-hist').innerHTML = t.historial.map(h =>
-      `<li><span>${h.fecha.slice(0, 10).split('-').reverse().join('/')}</span><span>${nombres[h.tipo]}</span><span>${h.cantidad > 0 ? '+' : ''}${h.cantidad}</span></li>`).join('');
+      `<li><span>${h.fecha.slice(0, 10).split('-').reverse().join('/')}</span><span>${labelMov(h)}</span><span>${h.cantidad > 0 ? '+' : ''}${h.cantidad}</span></li>`).join('');
     $('#tj-form').hidden = true;
     $('#tj-card').hidden = false;
     $('#tj-acciones').hidden = false;
