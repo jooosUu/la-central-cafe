@@ -1,4 +1,4 @@
-import { MENU as MENU_FIJO, COMBO } from './menu.js?v=13';
+import { MENU as MENU_FIJO, COMBO } from './menu.js?v=14';
 
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -23,6 +23,7 @@ const I18N = {
     nocheT: 'café de día, fuego de noche',
     hint: 'Toca <b>3D</b> para ver el plato y ponerlo sobre tu mesa.',
     searchPlaceholder: 'buscar café, choripán, bebidas…',
+    searchPlaceholderDia: 'buscar café, horneados, bebidas…',
     sencillo: 'sencillo',
     precio: 'precio',
     combo: 'combo',
@@ -68,6 +69,7 @@ const I18N = {
     nocheT: 'coffee by day, fire by night',
     hint: 'Tap <b>3D</b> to view the dish in Augmented Reality on your table.',
     searchPlaceholder: 'search coffee, food, drinks…',
+    searchPlaceholderDia: 'search coffee, pastries, drinks…',
     sencillo: 'single',
     precio: 'price',
     combo: 'combo',
@@ -117,7 +119,7 @@ function aplicarIdioma() {
   if (nt) nt.textContent = t.nocheT;
   const dt = $('#txt-dia-t'); if (dt) dt.textContent = t.nocheT;
   $('#txt-hint').innerHTML = t.hint;
-  $('#menu-search').placeholder = t.searchPlaceholder;
+  $('#menu-search').placeholder = document.documentElement.dataset.modo === 'parrilla' ? t.searchPlaceholder : t.searchPlaceholderDia;
   $('#txt-pie-test').textContent = t.calidadPie;
   $('#cart-title').textContent = t.tuPedido;
   $('#lbl-mesa').textContent = t.mesaLugar;
@@ -557,8 +559,11 @@ function renderCarta() {
 }
 
 // cuando cambia el modo en vivo (p. ej. a las 4 pm del jueves) la carta se vuelve a armar
-new MutationObserver(() => { if (carta.children.length) renderCarta(); })
-  .observe(document.documentElement, { attributes: true, attributeFilter: ['data-modo'] });
+new MutationObserver(() => {
+  if (carta.children.length) renderCarta();
+  const t = I18N[lang];
+  $('#menu-search').placeholder = document.documentElement.dataset.modo === 'parrilla' ? t.searchPlaceholder : t.searchPlaceholderDia;
+}).observe(document.documentElement, { attributes: true, attributeFilter: ['data-modo'] });
 
 // =================================================================== BUSCADOR INSTANTÁNEO
 const searchInput = $('#menu-search');
