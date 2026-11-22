@@ -852,3 +852,36 @@ html:not([data-modo="parrilla"]) .intro .hint { display: flex; visibility: hidde
 .tabs, html[data-modo="parrilla"] .tabs { background: transparent; backdrop-filter: none; }
 .tab { background: var(--bg); }
 html[data-modo="parrilla"] .tab:not(.on) { background: #0C0A09; }
+/* la palabra de día ocupa la misma caja que el dibujo de "parrilla" (600×200), así la frase cae en el mismo sitio */
+html:not([data-modo="parrilla"]) .intro-t { width: 100%; aspect-ratio: 3 / 1; display: flex; align-items: center; justify-content: center; line-height: 1; }
+@media (min-width: 900px) { html:not([data-modo="parrilla"]) .intro-t { max-width: 760px; } }
+html:not([data-modo="parrilla"]) .dia-tag { margin-bottom: 0; }
+html:not([data-modo="parrilla"]) .intro .hint { font: 500 12px/1.3 Utendo; text-transform: uppercase; letter-spacing: .06em; }
+.dia-taza { margin-bottom: 11px; }
+
+/* =================================================================
+   MISMOS TAMAÑOS DE LETRA DE DÍA Y DE NOCHE (títulos de categoría más contenidos)
+   ================================================================= */
+html .cat-t, html[data-modo="parrilla"] .cat-t {
+  font: 800 clamp(44px, 12vw, 84px)/.9 Utendo; letter-spacing: -.035em; text-transform: lowercase; transform: none; }
+html .tab, html[data-modo="parrilla"] .tab { font-size: 14px; font-weight: 800; }
+html .precios2 b, html[data-modo="parrilla"] .precios2 b { font: 800 clamp(24px, 6.4vw, 32px)/1 Utendo; }
+html .precios2 small, html[data-modo="parrilla"] .precios2 small { font-size: 13px; }
+html .precios2 span, html[data-modo="parrilla"] .precios2 span,
+html .desc, html[data-modo="parrilla"] .desc { font-size: 13px; }
+html .pre, html[data-modo="parrilla"] .pre { font-size: 1em; }
+@media (min-width: 900px) { html .cat-t, html[data-modo="parrilla"] .cat-t { font-size: 84px; } }
+
+/* "café" con el mismo tamaño de letra que el dibujo de "parrilla" (Utendo ExtraBold a ~25.7 % del ancho de su caja) */
+.dia-marca { container-type: inline-size; }
+html:not([data-modo="parrilla"]) .intro-t { font-size: calc(100cqi * .257); letter-spacing: -.02em; }
+@media (min-width: 900px) { html:not([data-modo="parrilla"]) .intro-t { font-size: calc(min(100cqi, 760px) * .257); } }
+
+/* CAFÉ LÍQUIDO (ver cafe-liquido.js): de día cae café desde arriba de la portada, el espejo del fuego que sube de noche */
+canvas.cafe-liquido { display: none; }
+html:not([data-modo="parrilla"]) .intro { position: relative; isolation: isolate;
+  margin-inline: calc(50% - 50vw); padding-inline: calc(50vw - 50% + var(--pad)); }
+html:not([data-modo="parrilla"]) body { overflow-x: visible; }
+html:not([data-modo="parrilla"]) canvas.cafe-liquido { display: block; position: absolute; inset: 0; width: 100%; height: 100%;
+  z-index: -1; pointer-events: none;
+  -webkit-mask-image: linear-gradient(to bottom, #000 70%, transparent 100%); mask-image: linear-gradient(to bottom, #000 70%, transparent 100%); }

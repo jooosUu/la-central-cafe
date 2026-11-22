@@ -1,4 +1,4 @@
-// Portada de día: la palabra "menú" formada por granos de café (negro sobre blanco, estética B/N de la marca).
+// Portada de día: la palabra "café" formada por granos de café tostados (arábica, robusta y libérica).
 // Al cargar, los granos caen y se acomodan; al pasar el dedo o el mouse se apartan y vuelven a su sitio
 // con un resorte amortiguado (sin rebotes). Solo corre en modo café; en la parrilla se apaga.
 (() => {
@@ -13,22 +13,48 @@
   const reducir = matchMedia('(prefers-reduced-motion: reduce)').matches;
   let granos = [], raf = 0, W = 0, H = 0, dpr = 1, puntero = null, visible = true, ultimoTexto = '';
 
-  // grano de café: óvalo con la ranura en S (se dibuja una vez y se reutiliza rotado)
-  let sprite = null, S = 0;
+  // granos de café dibujados con luz y sombra (originales, no fotos): tres tipos como los de verdad.
+  // arábica: ovalado con la ranura en S · robusta: redondo con la ranura recta · libérica: largo y angosto.
+  let sprites = [], S = 0;
+  const TIPOS = [
+    { rx: .60, ry: .86, curva: .30, tono: ['#A0522D', '#6E3219', '#3A170A'] },
+    { rx: .64, ry: .74, curva: .08, tono: ['#94512F', '#64301B', '#35170C'] },
+    { rx: .50, ry: .96, curva: .20, tono: ['#A85A33', '#73361C', '#3E190B'] },
+  ];
   function hacerSprite(tam) {
     S = tam;
-    sprite = document.createElement('canvas');
-    sprite.width = sprite.height = Math.ceil(tam * 2 * dpr);
-    const g = sprite.getContext('2d');
-    g.scale(dpr, dpr);
-    g.translate(tam, tam);
-    g.fillStyle = '#000';
-    g.beginPath(); g.ellipse(0, 0, tam * 0.62, tam * 0.86, 0, 0, Math.PI * 2); g.fill();
-    g.strokeStyle = '#fff'; g.lineWidth = Math.max(1, tam * 0.13); g.lineCap = 'round';
-    g.beginPath();
-    g.moveTo(0, -tam * 0.66);
-    g.bezierCurveTo(tam * 0.26, -tam * 0.22, -tam * 0.26, tam * 0.22, 0, tam * 0.66);
-    g.stroke();
+    const TUESTES = [   // de claro a casi negro (multiplica el tono base)
+      { f: 1.25, brillo: .30 }, { f: 1, brillo: .35 }, { f: .78, brillo: .4 }, { f: .58, brillo: .45 } ];
+    const variantes = [];
+    for (const tp of TIPOS) for (const tu of TUESTES) for (const lado of [1, -1]) variantes.push({ tp, tu, lado });
+    sprites = variantes.map(({ tp, tu, lado }) => {
+      const c = document.createElement('canvas');
+      c.width = c.height = Math.ceil(tam * 2 * dpr);
+      const g = c.getContext('2d');
+      g.scale(dpr, dpr);
+      g.translate(tam, tam);
+      const rx = tam * tp.rx, ry = tam * tp.ry;
+      // cuerpo tostado: luz arriba a la izquierda, borde oscuro
+      const grad = g.createRadialGradient(-rx * .35, -ry * .4, tam * .1, 0, 0, Math.max(rx, ry) * 1.05);
+      const tono = c => { const n = parseInt(c.slice(1), 16), m = v => Math.min(255, Math.round(v * tu.f));
+        return `rgb(${m(n >> 16)}, ${m((n >> 8) & 255)}, ${m(n & 255)})`; };
+      grad.addColorStop(0, tono(tp.tono[0])); grad.addColorStop(.6, tono(tp.tono[1])); grad.addColorStop(1, tono(tp.tono[2]));
+      g.fillStyle = grad;
+      g.beginPath(); g.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2); g.fill();
+      // ranura: surco oscuro con la piel plateada clara adentro
+      const k = tp.curva * lado * (.7 + Math.random() * .6);
+      const ranura = () => { g.beginPath(); g.moveTo(0, -ry * .8);
+        g.bezierCurveTo(rx * k * 2.2, -ry * .25, -rx * k * 2.2, ry * .25, 0, ry * .8); g.stroke(); };
+      g.lineCap = 'round';
+      g.strokeStyle = 'rgba(30, 12, 5, .85)'; g.lineWidth = Math.max(1.2, tam * .2); ranura();
+      g.strokeStyle = '#E9D5A8'; g.lineWidth = Math.max(.7, tam * .07); ranura();
+      // brillo suave de la superficie aceitosa
+      const b = g.createRadialGradient(-rx * .4, -ry * .45, 0, -rx * .4, -ry * .45, rx * .7);
+      b.addColorStop(0, `rgba(255, 230, 200, ${tu.brillo})`); b.addColorStop(1, 'rgba(255, 230, 200, 0)');
+      g.fillStyle = b;
+      g.beginPath(); g.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2); g.fill();
+      return c;
+    });
   }
 
   function armar() {
@@ -74,8 +100,8 @@
             // entran dispersos alrededor de su sitio y se juntan (sin pasar por encima de la cabecera)
             x: v ? v.x : xx + (Math.random() - .5) * W * .35,
             y: v ? v.y : y + (Math.random() - .5) * H * .9,
-            vx: 0, vy: 0, a: Math.random() * Math.PI, va: 0,
-            ha: (Math.random() - .5) * 1.2,
+            vx: 0, vy: 0, a: Math.random() * Math.PI, va: 0, tipo: v ? v.tipo : Math.floor(Math.random() * 24), esc: v ? v.esc : .78 + Math.random() * .42,
+            ha: (Math.random() - .5) * Math.PI * 1.6,   // cada grano mirando hacia su lado
           });
         }
       }
@@ -91,7 +117,8 @@
       ctx.save();
       ctx.translate(g.x, g.y);
       ctx.rotate(g.a);
-      ctx.drawImage(sprite, -half, -half, half * 2, half * 2);
+      const e = half * g.esc;   // tamaños distintos, como en un costal de verdad
+      ctx.drawImage(sprites[g.tipo], -e, -e, e * 2, e * 2);
       ctx.restore();
     }
   }
