@@ -1,4 +1,4 @@
-import { MENU as MENU_FIJO, COMBO } from './menu.js?v=14';
+import { MENU as MENU_FIJO, COMBO } from './menu.js?v=15';
 
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];

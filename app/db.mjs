@@ -213,6 +213,7 @@ function migrarEsquema() {
   }
   migrarHorarios();
   migrarFidelizacion();
+  migrarCatalogo();
 }
 
 // ---------- tarjeta de sellos: 1 sello por compra, 8 sellos = premio (café gratis o descuento) ----------
@@ -272,6 +273,116 @@ function migrarHorarios() {
       ic.run(id, nombre, seccion, tipo, orden, horario);
       prods.forEach(([pid, pn, pd], i) => ip.run(pid, pn, id, 0, i, pd || null));
     }
+    db.exec('COMMIT');
+  } catch (e) { db.exec('ROLLBACK'); throw e; }
+}
+
+// ---------- catálogo y precios reales (nov 2026): se aplica una sola vez por BD ----------
+function migrarCatalogo() {
+  db.exec('CREATE TABLE IF NOT EXISTS ajustes (clave TEXT PRIMARY KEY, valor TEXT)');
+  if (db.prepare(`SELECT valor FROM ajustes WHERE clave = 'catalogo_2026_11'`).get()) return;
+
+  const nuevasCats = [
+    ['ajies', 'Ajíes de la casa', 'de la casa', 'lista', 10, 'siempre'],
+    ['paquetes', 'Paquetes', 'mecato y otros', 'lista', 20, 'siempre'],
+    ['ponques', 'Ponqués y galletas', 'mecato y otros', 'lista', 21, 'siempre'],
+    ['dulces', 'Dulces y chicles', 'mecato y otros', 'lista', 22, 'siempre'],
+    ['otros', 'Otros', 'mecato y otros', 'lista', 23, 'siempre'],
+  ];
+
+  const actualizar = [
+    ['coronita', 'Coronita', 4000, 1],
+    ['stella', 'Stella Artois', 5000, 1],
+    ['agua', 'Agua Cristal 600ml', 2500, 1],
+    ['coca-250', 'Coca Mini 250 ml', 2500, 1],
+    ['empanadas-horneadas', 'Empanadas', 3500, 1],
+    ['pastel-pollo', 'Pastel de pollo', 3500, 1],
+    ['pastel-hawaiano', 'Pastel hawaiano', 3500, 1],
+    ['torta-vino', 'Torta de vino porción grande', 6000, 1],
+    ['mantecada', 'Mantecada porción', 3000, 1],
+    ['cafe', 'Café', 0, 0],
+  ];
+
+  const nuevosProds = [
+    // Café y aromáticas (día)
+    ['tinto-greca', 'Tinto greca', 'cafes', 1500, 1],
+    ['perico', 'Perico', 'cafes', 2500, 2],
+    ['cafe-leche', 'Café leche', 'cafes', 4000, 3],
+    ['aromatica-sobre', 'Aromáticas sobre', 'cafes', 1500, 4],
+    ['aromatica-frutas', 'Aromáticas con frutas', 'cafes', 3500, 5],
+    ['expreso', 'Expreso (máquina)', 'cafes', 3000, 6],
+    ['americano', 'Americano (máquina)', 'cafes', 4000, 7],
+    ['capuchino', 'Capuchino (máquina)', 'cafes', 5000, 8],
+    // Horneados (día)
+    ['brazo-de-reina', 'Brazo de Reina', 'horneados', 3000, 6],
+    // Cervezas (siempre)
+    ['club-dorada', 'Club Dorada', 'cervezas', 4000, 15],
+    // Sin alcohol / aguas / energizantes (siempre)
+    ['coca-zero-250', 'Coca Mini Zero 250 ml', 'sin alcohol', 2500, 16],
+    ['gaseosa-postobon-250', 'Gaseosa 250 ml Postobón', 'sin alcohol', 2000, 17],
+    ['gaseosa-postobon-400', 'Gaseosa 400 ml Postobón', 'sin alcohol', 4000, 18],
+    ['pony-mini-250', 'Pony Mini 250 ml', 'sin alcohol', 2500, 19],
+    ['pony-malta-330', 'Pony Malta 330 ml', 'sin alcohol', 3500, 20],
+    ['jugo-hit-500', 'Jugo Hit 500 ml', 'sin alcohol', 3500, 21],
+    ['power', 'Power', 'sin alcohol', 3500, 22],
+    ['gatorade-500', 'Gatorade 500 ml', 'sin alcohol', 4500, 23],
+    ['gatorade-zero-500', 'Gatorade Zero 500 ml', 'sin alcohol', 4500, 24],
+    ['speed-botella-250', 'Speed botella 250', 'sin alcohol', 2500, 25],
+    ['speed-lata', 'Speed lata', 'sin alcohol', 3000, 26],
+    ['vive-100', 'Vive 100', 'sin alcohol', 2500, 27],
+    ['red-bull-lata', 'Red bull lata', 'sin alcohol', 8800, 28],
+    ['agua-pequena-300', 'Agua pequeña 300 ml', 'sin alcohol', 1500, 29],
+    ['agua-gas-600', 'Agua Cristal con gas 600 ml', 'sin alcohol', 2700, 30],
+    ['agua-litro', 'Agua Cristal Litro', 'sin alcohol', 3000, 31],
+    ['bretana', 'Bretaña', 'sin alcohol', 3500, 32],
+    // Ajíes de la casa (tarros)
+    ['aji-maracuya', 'Ají maracuyá (tarro)', 'ajies', 20000, 1],
+    ['aji-lulo', 'Ají lulo (tarro)', 'ajies', 20000, 2],
+    ['aji-chorizo', 'Ají chorizo (tarro)', 'ajies', 24000, 3],
+    // Paquetes
+    ['cheetos', 'Cheetos', 'paquetes', 3000, 1],
+    ['detodito', 'Detodito', 'paquetes', 3000, 2],
+    ['choklitos', 'Choklitos', 'paquetes', 2500, 3],
+    ['tostacos-picantes', 'Tostacos picantes', 'paquetes', 2800, 4],
+    ['papas-margarita', 'Papas Margarita', 'paquetes', 2500, 5],
+    ['natuchips', 'Natuchips', 'paquetes', 2500, 6],
+    ['doritos', 'Doritos', 'paquetes', 3000, 7],
+    ['mani-moto-limon', 'Maní Moto Limón', 'paquetes', 2500, 8],
+    ['mani-moto-natural', 'Maní Moto Natural', 'paquetes', 2500, 9],
+    // Ponqués y galletas
+    ['club-social', 'Club Social', 'ponques', 1200, 1],
+    ['chokis', 'Chokis', 'ponques', 2000, 2],
+    ['ponque-gala', 'Ponqué Gala', 'ponques', 2500, 3],
+    ['chocorramo-tajada', 'Chocorramo tajada (grande)', 'ponques', 3200, 4],
+    ['chocorramo-miti', 'Chocorramo miti (mediano)', 'ponques', 2500, 5],
+    ['chocorramo-brownie', 'Chocorramo Brownie', 'ponques', 4000, 6],
+    ['barrita-chocorramo', 'Barrita de chocorramo', 'ponques', 2500, 7],
+    ['gansito', 'Gansito', 'ponques', 2500, 8],
+    // Dulces y chicles
+    ['halls-x1', 'Halls x1', 'dulces', 200, 1],
+    ['halls-barra', 'Halls barra', 'dulces', 2400, 2],
+    ['trident-x1', 'Trident x1', 'dulces', 300, 3],
+    ['trident-x3', 'Trident x3', 'dulces', 1200, 4],
+    ['trident-x5', 'Trident x5', 'dulces', 2200, 5],
+    ['chiclets-x2', 'Chiclets x2', 'dulces', 300, 6],
+    ['chocolatina-jet', 'Chocolatina JET', 'dulces', 1300, 7],
+    ['bombombum', 'Bombombum', 'dulces', 700, 8],
+    ['sparkies', 'Sparkies', 'dulces', 300, 9],
+    ['milka-oreo', 'Milka Oreo', 'dulces', 2300, 10],
+    // Otros
+    ['cigarrillos', 'Cigarrillos', 'otros', 1300, 1],
+  ];
+
+  const ic = db.prepare('INSERT OR IGNORE INTO categorias (id, nombre, seccion, tipo, orden, horario) VALUES (?,?,?,?,?,?)');
+  const up = db.prepare('UPDATE productos SET nombre = ?, precio = ?, activo = ? WHERE id = ?');
+  const ip = db.prepare('INSERT OR IGNORE INTO productos (id, nombre, categoria, precio, orden) VALUES (?,?,?,?,?)');
+
+  db.exec('BEGIN');
+  try {
+    for (const c of nuevasCats) ic.run(...c);
+    for (const [id, nom, pre, act] of actualizar) up.run(nom, pre, act, id);
+    for (const p of nuevosProds) ip.run(...p);
+    db.prepare(`INSERT OR REPLACE INTO ajustes (clave, valor) VALUES ('catalogo_2026_11', '1')`).run();
     db.exec('COMMIT');
   } catch (e) { db.exec('ROLLBACK'); throw e; }
 }

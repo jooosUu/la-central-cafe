@@ -122,11 +122,12 @@ await t('carta pública marca agotado cuando falta un insumo', async () => {
 });
 await t('carta trae secciones del menú con combo y modelo 3D', async () => {
   const d = (await anon('GET', '/carta')).data;
-  assert.deepEqual(d.secciones.map(s => s.titulo), ['café de día', 'choripan', 'fuego de noche', 'bebidas']);
-  // horario de cada bloque: lo de la parrilla solo de noche, café y horneados solo de día, bebidas siempre
+  assert.deepEqual(d.secciones.map(s => s.titulo), ['café de día', 'choripan', 'fuego de noche', 'bebidas', 'de la casa', 'mecato y otros']);
+  // horario de cada bloque: lo de la parrilla solo de noche, café y horneados solo de día, bebidas/ajíes/mecato siempre
   const hor = Object.fromEntries(d.secciones.flatMap(s => s.bloques).map(b => [b.id, b.horario]));
   assert.equal(hor.choripan, 'noche'); assert.equal(hor.parrilla, 'noche');
   assert.equal(hor.cafes, 'dia'); assert.equal(hor.horneados, 'dia'); assert.equal(hor.cervezas, 'siempre');
+  assert.equal(hor.ajies, 'siempre'); assert.equal(hor.paquetes, 'siempre');
   const chori = itemsCarta(d).find(p => p.id === 'choripan');
   assert.equal(chori.model, 'choripan');
   assert.deepEqual(chori.comboIncluye, ['+papa criolla', '+coca-cola zero 250ml']);
@@ -226,10 +227,9 @@ await t('tarjeta de sellos: 1 sello por compra, premio a los 8 y anular devuelve
   assert.equal(tj8.iconos.length, Math.min(tj8.sellos, tj8.meta));
   // café gratis: necesita un café en la cuenta
   assert.equal((await vender({ premio: 'cafe' })).status, 400);
-  await admin('PUT', '/productos/cafe', { precio: 4000 });
-  const vc = await caja('POST', '/ventas', { items: [{ producto_id: 'cafe', cantidad: 2 }, { producto_id: 'aguila', cantidad: 1 }], pago: 'efectivo', cliente: tj.data.token, premio: 'cafe' });
+  const vc = await caja('POST', '/ventas', { items: [{ producto_id: 'capuchino', cantidad: 2 }, { producto_id: 'aguila', cantidad: 1 }], pago: 'efectivo', cliente: tj.data.token, premio: 'cafe' });
   assert.equal(vc.status, 200);
-  assert.equal(vc.data.descuento, 4000); assert.equal(vc.data.total, vc.data.subtotal - 4000);
+  assert.equal(vc.data.descuento, 5000); assert.equal(vc.data.total, vc.data.subtotal - 5000);
   assert.equal(vc.data.tarjeta.sellos, 1);   // 8 - 8 del canje + 1 de esta compra
   assert.equal(vc.data.tarjeta.iconos.length, 1);
   // anular la venta del canje devuelve el premio
