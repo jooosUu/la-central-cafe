@@ -473,6 +473,8 @@ $('#btn-enviar-opinion')?.addEventListener('click', async () => {
 // =================================================================== RENDERIZADO CARTA
 const tabs = $('#tabs'), carta = $('#carta');
 const byId = {};
+const abiertas = new Set();
+let abiertasIniciado = false;
 let targets = [];
 
 const btn3d = it => it.model
@@ -499,15 +501,27 @@ function renderCarta() {
   for (const sec of secciones) {
     const bloques = sec.bloques.filter(b => noche || b.horario !== 'noche');
     if (!bloques.length) continue;
-    const s = el('section', 'cat'); s.id = sec.id;
+    if (!abiertasIniciado) { abiertas.add(sec.id); abiertasIniciado = true; }
+    const totalItems = bloques.reduce((a, b) => a + b.items.length, 0);
+    const abierta = abiertas.has(sec.id);
+    const s = el('section', 'cat' + (abierta ? '' : ' recogida')); s.id = sec.id;
     const h2 = el('h2', 'cat-t'); h2.textContent = sec.titulo;
-    s.append(h2, el('hr', 'regla'));
+    const toggle = el('button', 'cat-toggle'); toggle.type = 'button'; toggle.setAttribute('aria-expanded', String(abierta));
+    const meta = el('span', 'cat-meta', `${totalItems} <i class="cat-chev" aria-hidden="true">▾</i>`);
+    toggle.append(h2, meta);
+    toggle.onclick = () => {
+      const rec = s.classList.toggle('recogida');
+      toggle.setAttribute('aria-expanded', String(!rec));
+      if (rec) abiertas.delete(sec.id); else abiertas.add(sec.id);
+    };
+    const cuerpo = el('div', 'cat-cuerpo');
+    s.append(toggle, el('hr', 'regla'), cuerpo);
     if (bloques[0]?.tipo === 'destacado') tab(sec.id, sec.titulo);
 
     let dests = null, listas = null;
     for (const b of bloques) {
       if (b.tipo === 'destacado') {
-        dests ??= s.appendChild(el('div', 'dests'));
+        dests ??= cuerpo.appendChild(el('div', 'dests'));
         for (const it of b.items) {
           byId[it.id] = it;
           const art = el('article', 'dest');
@@ -546,7 +560,7 @@ function renderCarta() {
           ul.append(li);
         }
         blk.append(ul);
-        listas ??= s.appendChild(el('div', 'listas'));
+        listas ??= cuerpo.appendChild(el('div', 'listas'));
         listas.append(blk);
       }
     }
@@ -583,8 +597,27 @@ function filtrarCarta(q) {
       if (match) secHasVisible = true;
     }
     sec.style.display = secHasVisible ? '' : 'none';
+    if (norm) {
+      if (secHasVisible) sec.classList.remove('recogida');
+    } else {
+      const rec = !abiertas.has(sec.id);
+      sec.classList.toggle('recogida', rec);
+      sec.querySelector('.cat-toggle')?.setAttribute('aria-expanded', String(!rec));
+    }
   }
 }
+
+tabs.addEventListener('click', e => {
+  const a = e.target.closest('.tab');
+  if (!a) return;
+  const dest = document.getElementById(a.dataset.cat);
+  const sec = dest?.closest('.cat');
+  if (sec && sec.classList.contains('recogida')) {
+    sec.classList.remove('recogida');
+    abiertas.add(sec.id);
+    sec.querySelector('.cat-toggle')?.setAttribute('aria-expanded', 'true');
+  }
+});
 
 searchInput.oninput = () => filtrarCarta(searchInput.value);
 searchClear.onclick = () => {
