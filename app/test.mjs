@@ -88,6 +88,10 @@ await t('datos inválidos son rechazados', async () => {
   assert.equal((await caja('POST', '/ventas', { items: [{ producto_id: 'aguila', cantidad: 1 }], pago: 'bitcoin' })).status, 400);
   assert.equal((await caja('POST', '/ventas', { items: [{ producto_id: 'aguila', cantidad: 1 }], pago: 'efectivo', recibido: 100 })).status, 400);
 });
+await t('producto sin precio no se puede vender ni poner en comanda', async () => {
+  assert.equal((await caja('POST', '/ventas', { items: [{ producto_id: 'alitas', variante: 'base', cantidad: 1 }], pago: 'efectivo' })).status, 400);
+  assert.equal((await caja('POST', '/comandas', { mesa: 'Mesa 1', items: [{ id: 'alitas', cantidad: 1 }] })).status, 400);
+});
 await t('cajero NO puede anular ni cambiar precios', async () => {
   assert.equal((await caja('POST', `/ventas/${ventaId}/anular`)).status, 403);
   assert.equal((await caja('PUT', '/productos/choripan', { precio: 1 })).status, 403);

@@ -151,6 +151,7 @@ function registrarVenta(u, body) {
     if (variante === 'combo' && !p.precio_combo) fail(400, `${p.nombre} no tiene combo`);
     const cantidad = num(it.cantidad, { min: 1, max: 99, int: true }) ?? fail(400, 'Cantidad inválida');
     const precio = variante === 'combo' ? p.precio_combo : p.precio;
+    if (!(precio > 0)) fail(400, `${p.nombre} aún no tiene precio`);
     const rec = receta(p.id, variante);
     const costo = rec.reduce((a, r) => a + r.cantidad * r.costo, 0);
     return { p, variante, cantidad, precio, rec, costo };
@@ -388,6 +389,7 @@ function guardarItemsComanda(cid, items) {
     if (variante === 'combo' && !pr.precio_combo) fail(400, `${pr.nombre} no tiene combo`);
     const nombre = pr.nombre + (variante === 'combo' ? ' (combo)' : '');
     const precio = variante === 'combo' ? pr.precio_combo : pr.precio;
+    if (!(precio > 0)) fail(400, `${pr.nombre} aún no tiene precio`);
     const cant = num(it.cantidad, { min: 1, max: 99, int: true }) ?? fail(400, 'Cantidad inválida');
     total += precio * cant;
     insItem.run(cid, pid, nombre, variante, cant, precio, texto(it.notas, 150));
@@ -590,10 +592,11 @@ ruta('POST', '/api/categorias', ({ u, body }) => {
   const nombre = texto(body?.nombre, 30) || fail(400, 'Falta el nombre');
   const seccion = texto(body?.seccion, 30).toLowerCase() || fail(400, 'Falta la sección');
   const tipo = body?.tipo === 'destacado' ? 'destacado' : 'lista';
+  const horario = ['dia', 'noche', 'siempre'].includes(body?.horario) ? body.horario : 'siempre';
   const id = slug(nombre) || fail(400, 'Nombre inválido');
   if (db.prepare('SELECT 1 FROM categorias WHERE id = ?').get(id)) fail(400, 'Ya existe esa categoría');
   const orden = db.prepare('SELECT COALESCE(MAX(orden), 0) + 1 o FROM categorias').get().o;
-  db.prepare('INSERT INTO categorias (id, nombre, seccion, tipo, orden) VALUES (?,?,?,?,?)').run(id, nombre, seccion, tipo, orden);
+  db.prepare('INSERT INTO categorias (id, nombre, seccion, tipo, orden, horario) VALUES (?,?,?,?,?,?)').run(id, nombre, seccion, tipo, orden, horario);
   return db.prepare('SELECT * FROM categorias WHERE id = ?').get(id);
 });
 ruta('GET', '/api/qr', ({ u, q }) => {

@@ -398,11 +398,11 @@ async function api(method, path, body) {
   }
 }
 
-const MESAS_LISTA = ['Mesa 1', 'Mesa 2', 'Mesa 3', 'Mesa 4', 'Mesa 5', 'Mesa 6', 'Mesa 7', 'Mesa 8', 'Barra 1', 'Barra 2', 'Para Llevar'];
+const MESAS_LISTA = ['Mesa 1', 'Mesa 2', 'Mesa 3', 'Mesa 4', 'Mesa 5', 'Mesa 6', 'Mesa 7', 'Mesa 8', 'Mesa 9', 'Mesa 10', 'Barra 1', 'Barra 2', 'Para Llevar'];
 
 const S = {
   u: null, productos: [], insumos: [], recetas: [], categorias: [], modelos: [],
-  carrito: [], cat: 'choripan', pago: 'efectivo', recibido: '', rango: 'hoy',
+  carrito: [], cat: 'choripan', q: '', pago: 'efectivo', recibido: '', rango: 'hoy',
   mesa: 'Mesa 1', propina: 0, propinaPct: 0, descuento: 0, descuentoPct: 0,
   comanda_id: null, comandas: [], ultimoTicket: null, filtroInv: 'todos'
 };
@@ -447,11 +447,11 @@ function imprimirConModo(modo) {
   window.print();
 }
 
-// Ticket térmico (80 mm, solo tinta negra). De noche (3 pm – 5 am) lleva la llama de la parrilla.
-function esHoraParrilla(d) { const h = d.getHours(); return h >= 15 || h < 5; }
+// Ticket térmico (80 mm, solo tinta negra). En la parrilla (jue–sáb 4–10 pm) lleva la llama de la parrilla.
+function esHoraParrilla(d) { const h = d.getHours(); return [4, 5, 6].includes(d.getDay()) && h >= 16 && h < 22; }
 
 function generarTicketHtml(venta) {
-  const d = new Date(venta.fecha || Date.now());
+  const d = parseFecha(venta.fecha || Date.now());
   const fecha = d.toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric' });
   const hora = d.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: false });
   const items = venta.items || [];
@@ -466,8 +466,7 @@ function generarTicketHtml(venta) {
       <div class="tk-titulo">LA CENTRAL · TUNJA<br>${noche ? 'PARRILLA DE NOCHE' : 'CAFÉ DE ORIGEN'}</div>
 
       <div class="tk-datos">
-        NIT 901.458.912-3<br>
-        CRA 4 # 12-34 · TUNJA, BOYACÁ<br>
+        TUNJA, BOYACÁ<br>
         ${esPrecuenta ? 'PRE-CUENTA' : 'TICKET'} N° ${esc(num)}<br>
         ${esc(String(venta.mesa || 'CAJA').toUpperCase())} · ATENDIÓ ${esc(String(S.u?.nombre || 'CAJERO').toUpperCase())}
       </div>
@@ -489,7 +488,7 @@ function generarTicketHtml(venta) {
           (venta.cambio != null ? fila('CAMBIO', cop(venta.cambio)) : '')}
 
       <div class="tk-pie2">
-        ${fila('CAJA 1', esc(String(venta.mesa || 'CAJA').toUpperCase()))}
+        ${fila(esc(String(S.u?.nombre || 'CAJA').toUpperCase()), esc(String(venta.mesa || 'CAJA').toUpperCase()))}
         ${fila(fecha, hora)}
       </div>
 
@@ -715,8 +714,10 @@ addEventListener('hashchange', router);
 let filtroCli = '', filtroPremio = false;
 async function clientes() {
   $('#vista').innerHTML = `<section class="pagina"><header class="p-head"><h1>clientes</h1></header><hr class="regla"><p class="muted">Cargando…</p></section>`;
-  let d;
-  try { d = await api('GET', '/clientes/lista'); }
+  let d, fbs;
+  try {
+    [d, fbs] = await Promise.all([api('GET', '/clientes/lista'), api('GET', '/feedback').catch(() => [])]);
+  }
   catch (err) { $('#vista').innerHTML = `<section class="pagina"><header class="p-head"><h1>clientes</h1></header><hr class="regla"><p class="vacio">${esc(err.message)}</p></section>`; return; }
   const bolitas = (n, iconos = []) => `<span class="sellos-bolitas">${Array.from({ length: d.meta }, (_, i) =>
     `<i class="${i < Math.min(n, d.meta) ? ('on' + (iconos?.[i] === 'fuego' ? ' fuego' : '')) : ''}"></i>`).join('')}</span>`;
@@ -749,6 +750,10 @@ async function clientes() {
     <p class="muted">${d.meta} sellos = café gratis o ${d.descuento}% de descuento. Cada compra con el celular del cliente suma 1 sello.</p>
     <div class="scroll-x"><table class="tabla"><thead><tr><th>cliente</th><th>sellos</th><th class="n">compras</th><th class="n">premios</th><th>última visita</th></tr></thead>
       <tbody id="cli-tabla"></tbody></table></div>
+    <h2 class="sub">opiniones de clientes</h2>
+    ${fbs.length ? `<div class="scroll-x"><table class="tabla"><thead><tr><th>fecha</th><th>estrellas</th><th>mesa</th><th>cliente</th><th>comentario</th></tr></thead><tbody>
+      ${fbs.map(f => `<tr><td>${esc((f.fecha || '').slice(0, 16).replace('T', ' '))}</td><td>${'★'.repeat(Math.max(1, Math.min(5, Number(f.estrellas) || 5)))}</td><td>${esc(f.mesa || '')}</td><td>${esc(f.cliente || '')}</td><td>${esc(f.comentario || '')}</td></tr>`).join('')}
+    </tbody></table></div>` : '<p class="vacio">Aún no hay opiniones.</p>'}
   </section>`;
   pintar();
   $('#cli-q').oninput = e => { filtroCli = e.target.value; pintar(); };
@@ -791,12 +796,14 @@ function tiempoRelativo(fechaStr) {
 
 function renderMesas() {
   const activas = (S.comandas || []).filter(c => c.estado !== 'cobrado' && c.estado !== 'archivado');
+  const mesasVista = [...MESAS_LISTA, ...new Set(activas.map(c => c.mesa).filter(m => !MESAS_LISTA.includes(m)))];
+  const libres = MESAS_LISTA.filter(m => !activas.some(c => c.mesa === m)).length;
   $('#vista').innerHTML = `
   <section class="pagina">
     <header class="p-head">
       <div>
         <h1>mesas</h1>
-        <p class="muted">${activas.length} mesa(s) ocupada(s) · ${MESAS_LISTA.length - activas.length} libre(s)</p>
+        <p class="muted">${activas.length} comanda(s) activa(s) · ${libres} libre(s)</p>
       </div>
       <div class="p-acc">
         <button class="btn btn-sm" id="btn-nueva-m">+ nueva comanda</button>
@@ -804,38 +811,39 @@ function renderMesas() {
     </header>
     <hr class="regla">
     <div class="mesas-grid">
-      ${MESAS_LISTA.map(m => {
-        const c = activas.find(x => x.mesa === m);
-        if (c) {
-          const nItems = (c.items || []).reduce((a, it) => a + (Number(it.cantidad) || 1), 0);
-          return `
-            <div class="mesa-card ocupada">
-              <div class="mesa-top">
-                <div class="mesa-num">${esc(m)}</div>
-                <b class="tag">${c.estado}</b>
-              </div>
-              <div class="mesa-info">
-                <span class="muted">${tiempoRelativo(c.fecha)} · ${nItems} ítem(s)</span>
-                <div class="mesa-tot">${cop(c.total)}</div>
-                ${c.notas ? `<p class="muted" style="font-size:12px; margin-top:2px;">"${esc(c.notas)}"</p>` : ''}
-              </div>
-              <div class="mesa-acc">
-                <button class="btn btn-sm" data-abrir="${c.id}" style="background:#fff; color:#000;">+ agregar</button>
-                <button class="btn btn-sm link" data-precuenta="${c.id}" style="color:#fff;">pre-cuenta</button>
-                <button class="btn btn-sm" data-cobrar-m="${c.id}" style="background:#22c55e; border-color:#22c55e; color:#fff;">cobrar</button>
-              </div>
-            </div>`;
-        } else {
-          return `
-            <div class="mesa-card libre">
-              <div class="mesa-top">
-                <div class="mesa-num">${esc(m)}</div>
-                <span class="muted" style="font-size:13px; font-weight:800;">LIBRE</span>
-              </div>
-              <div class="mesa-info"><p class="muted" style="font-size:14px;">Disponible para clientes</p></div>
-              <div class="mesa-acc"><button class="btn btn-sm btn-negro" data-nueva="${esc(m)}">abrir mesa</button></div>
-            </div>`;
+      ${mesasVista.flatMap(m => {
+        const cs = activas.filter(x => x.mesa === m);
+        if (cs.length) {
+          return cs.map(c => {
+            const nItems = (c.items || []).reduce((a, it) => a + (Number(it.cantidad) || 1), 0);
+            return `
+              <div class="mesa-card ocupada">
+                <div class="mesa-top">
+                  <div class="mesa-num">${esc(m)}</div>
+                  <b class="tag">${c.estado}</b>
+                </div>
+                <div class="mesa-info">
+                  <span class="muted">${tiempoRelativo(c.fecha)} · ${nItems} ítem(s)</span>
+                  <div class="mesa-tot">${cop(c.total)}</div>
+                  ${c.notas ? `<p class="muted" style="font-size:12px; margin-top:2px;">"${esc(c.notas)}"</p>` : ''}
+                </div>
+                <div class="mesa-acc">
+                  <button class="btn btn-sm" data-abrir="${c.id}" style="background:#fff; color:#000;">+ agregar</button>
+                  <button class="btn btn-sm link" data-precuenta="${c.id}" style="color:#fff;">pre-cuenta</button>
+                  <button class="btn btn-sm" data-cobrar-m="${c.id}" style="background:#22c55e; border-color:#22c55e; color:#fff;">cobrar</button>
+                </div>
+              </div>`;
+          });
         }
+        return [`
+          <div class="mesa-card libre">
+            <div class="mesa-top">
+              <div class="mesa-num">${esc(m)}</div>
+              <span class="muted" style="font-size:13px; font-weight:800;">LIBRE</span>
+            </div>
+            <div class="mesa-info"><p class="muted" style="font-size:14px;">Disponible para clientes</p></div>
+            <div class="mesa-acc"><button class="btn btn-sm btn-negro" data-nueva="${esc(m)}">abrir mesa</button></div>
+          </div>`];
       }).join('')}
     </div>
   </section>`;
@@ -944,24 +952,38 @@ function renderCocina() {
 }
 
 // =================================================================== VENDER
+const norm = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+function pintarGrid() {
+  const grid = $('#v-grid');
+  if (!grid) return;
+  const q = norm(S.q.trim());
+  const cat = S.categorias.find(c => c.id === S.cat);
+  const ps = q
+    ? S.productos.filter(p => p.activo && norm(p.nombre).includes(q))
+    : S.productos.filter(p => p.activo && p.categoria === S.cat);
+  grid.className = `grid ${!q && cat?.tipo === 'destacado' ? 'grid-big' : ''}`;
+  grid.innerHTML = ps.map(tile).join('') || `<p class="vacio">${q ? 'Ningún producto coincide con la búsqueda.' : 'No hay productos en venta en esta categoría.'}</p>`;
+  $$('[data-add]', grid).forEach(b => b.onclick = () => agregar(b.dataset.add, b.dataset.var));
+}
 function vender() {
   if (!S.categorias.some(c => c.id === S.cat)) S.cat = S.categorias[0]?.id;
-  const cat = S.categorias.find(c => c.id === S.cat);
-  const ps = S.productos.filter(p => p.activo && p.categoria === S.cat);
   $('#vista').innerHTML = `
   <div class="vender">
     <section class="catalogo">
       <header class="v-head"><h1>vender</h1></header>
       <div class="chips" role="tablist">${S.categorias.map(c => `<button role="tab" aria-selected="${c.id === S.cat}" data-cat="${esc(c.id)}">${esc(c.nombre.toLowerCase())}</button>`).join('')}</div>
-      <div class="grid ${cat?.tipo === 'destacado' ? 'grid-big' : ''}">${ps.map(tile).join('') || '<p class="vacio">No hay productos en venta en esta categoría.</p>'}</div>
+      <label class="buscar"><span class="sr">Buscar producto</span><input id="v-buscar" type="search" placeholder="buscar producto…" autocomplete="off" value="${esc(S.q)}"></label>
+      <div class="grid" id="v-grid"></div>
     </section>
     <aside class="carrito" id="carrito"></aside>
   </div>`;
-  $$('.chips button').forEach(b => b.onclick = () => { S.cat = b.dataset.cat; vender(); });
-  $$('[data-add]').forEach(b => b.onclick = () => agregar(b.dataset.add, b.dataset.var));
+  $$('.chips button').forEach(b => b.onclick = () => { S.q = ''; S.cat = b.dataset.cat; vender(); });
+  $('#v-buscar').oninput = e => { S.q = e.target.value; pintarGrid(); };
+  pintarGrid();
   pintarCarrito();
 }
 function tile(p) {
+  if (!(p.precio > 0)) return `<div class="tile off"><span class="t-nom">${esc(p.nombre)}</span><b class="tag">sin precio</b></div>`;
   const n = disponibles(p.id);
   const estado = n <= 0 ? '<b class="tag tag-neg">agotado</b>' : n <= 5 ? `<b class="tag">quedan ${n}</b>` : '';
   if (p.precio_combo) return `
@@ -1375,15 +1397,22 @@ function cierre(r, desde, hasta) {
         ${r.porPago.map(p => `<li><span class="nom">${PAGOS[p.pago] || esc(p.pago)} <small class="muted">${p.ventas}</small></span><span class="dots"></span><b>${cop(p.total)}</b></li>`).join('')}
         <li class="tot"><span class="nom">total</span><span class="dots"></span><b>${cop(r.total)}</b></li>
       </ul>
+      <label class="campo"><span>base de caja (efectivo con el que se abrió)</span><input id="base" inputmode="numeric" placeholder="$"></label>
       <label class="campo"><span>efectivo contado en caja</span><input id="contado" inputmode="numeric" placeholder="$"></label>
-      <div class="cambio" id="dif"><span>diferencia vs. esperado (${cop(ef)})</span><b>—</b></div>
+      <div class="cambio" id="dif"><span id="dif-esp">diferencia vs. esperado (${cop(ef)})</span><b>—</b></div>
       ${r.propinas ? `<p class="muted" style="margin-top:8px;">Incluye propinas registradas: <b>${cop(r.propinas)}</b></p>` : ''}
     </div>`, () => { imprimirConModo('cierre'); return false; }, { ok: 'imprimir' });
-  $('#contado').oninput = e => {
-    const v = Number(e.target.value.replace(/\D/g, '')) || 0, d = v - ef;
+  const recalc = () => {
+    const base = Number($('#base')?.value.replace(/\D/g, '')) || 0;
+    const esp = ef + base;
+    const espEl = $('#dif-esp');
+    if (espEl) espEl.textContent = `diferencia vs. esperado (${cop(esp)})`;
+    const v = Number($('#contado')?.value.replace(/\D/g, '')) || 0, d = v - esp;
     $('#dif b').textContent = v ? (d === 0 ? 'cuadra ✓' : (d > 0 ? 'sobran ' : 'faltan ') + cop(Math.abs(d))) : '—';
     $('#dif').classList.toggle('neg', v && d < 0);
   };
+  $('#base').oninput = recalc;
+  $('#contado').oninput = recalc;
 }
 
 // =================================================================== AJUSTES
@@ -1491,7 +1520,11 @@ function nuevaCategoria() {
     <datalist id="secciones">${secciones.map(x => `<option value="${esc(x)}">`).join('')}</datalist>
     <label class="campo"><span>cómo se ve en el menú</span><select name="tipo">
       <option value="lista">lista con puntos guía (bebidas, adiciones)</option>
-      <option value="destacado">platos grandes con foto 3D y combo</option></select></label>`,
+      <option value="destacado">platos grandes con foto 3D y combo</option></select></label>
+    <label class="campo"><span>cuándo se ve</span><select name="horario">
+      <option value="siempre">siempre</option>
+      <option value="dia">solo de día (café)</option>
+      <option value="noche">solo en la parrilla (jue–sáb 4–10 pm)</option></select></label>`,
   async fd => { await api('POST', '/categorias', Object.fromEntries(fd)); await cargar(); ajustes(); toast('Categoría creada'); });
 }
 function mostrarQR(lista) {

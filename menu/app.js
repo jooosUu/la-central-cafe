@@ -31,6 +31,7 @@ const I18N = {
     agotadoHoy: 'agotado hoy',
     pedir: '+ pedir',
     pedirCombo: '+ combo',
+    soloParrilla: 'se pide jue a sáb · 4 a 10 pm',
     verEnMesa: 'ver en mi mesa',
     tuPedido: 'tu pedido',
     mesaLugar: 'mesa o lugar:',
@@ -46,8 +47,8 @@ const I18N = {
     mapsTitle: 'visítanos en Tunja',
     mapsDesc: 'La Central · Calidad de origen, filtrados y buena vibra en Tunja, Boyacá.',
     igDesc: 'Fotos de nuestros cafés de origen, nuevos granos, métodos de extracción y eventos especiales.',
-    fbTitle: '¡pedido en cocina!',
-    fbSubtitle: 'Tu orden está siendo preparada. En breve te la llevamos a tu mesa.',
+    fbTitle: '¡pedido listo para enviar!',
+    fbSubtitle: 'Envía el mensaje en WhatsApp para confirmar tu pedido. Te avisamos en la mesa cuando esté listo.',
     fbQuestion: '¿Cómo va tu experiencia hoy con nosotros?',
     fbStarHint: 'Toca las estrellas para calificar',
     fbCheerTitle: '¡Nos alegra mucho! ',
@@ -77,6 +78,7 @@ const I18N = {
     agotadoHoy: 'sold out today',
     pedir: '+ order',
     pedirCombo: '+ combo',
+    soloParrilla: 'order thu–sat · 4–10 pm',
     verEnMesa: 'view on table',
     tuPedido: 'your order',
     mesaLugar: 'table or place:',
@@ -92,8 +94,8 @@ const I18N = {
     mapsTitle: 'visit us in Tunja',
     mapsDesc: 'La Central · Specialty origin coffee, pour-overs and good vibes in Tunja, Boyacá.',
     igDesc: 'Photos of our origin beans, brewing methods, specialty coffee and community events.',
-    fbTitle: 'order in kitchen!',
-    fbSubtitle: 'Your order is being prepared. We will bring it to your table shortly.',
+    fbTitle: 'order ready to send!',
+    fbSubtitle: 'Send the WhatsApp message to confirm your order. We will let you know at your table when it is ready.',
     fbQuestion: 'How is your experience with us today?',
     fbStarHint: 'Tap the stars to rate',
     fbCheerTitle: 'We are thrilled! ',
@@ -258,7 +260,7 @@ function guardarCarrito() {
 
 function agregarAlCarrito(itemId, variante = 'sencillo') {
   const it = byId[itemId];
-  if (!it || it.agotado || !(it.precio > 0)) return;
+  if (!it || it.agotado || !(it.precio > 0) || fueraDeHora(it)) return;
   if (variante === 'combo' && (!(it.combo > 0) || it.comboAgotado)) return;
   const precioUnit = (variante === 'combo' && it.combo) ? it.combo : it.precio;
   const index = cart.findIndex(c => c.id === it.id && c.variante === variante);
@@ -483,6 +485,8 @@ const btn3d = it => it.model
 
 // precio 0 = producto nuevo sin precio aún (se fija desde la caja): se muestra "por confirmar" y no se puede pedir
 const sinPrecio = it => !(it.precio > 0);
+const parrillaAbierta = () => { const d = new Date(), h = d.getHours(); return [4, 5, 6].includes(d.getDay()) && h >= 16 && h < 22; };
+const fueraDeHora = it => !!it.noche && !parrillaAbierta();
 const precioTxt = it => sinPrecio(it) ? I18N[lang].porConfirmar : fmt(it.precio);
 const fila = (it, extra = '') =>
   `<div class="fila${it.agotado ? ' agotado' : ''}${sinPrecio(it) ? ' sin-precio' : ''}"><span class="nom">${esc(it.nombre)}</span><span class="dots" aria-hidden="true"></span><span class="pre">${it.agotado ? I18N[lang].agotado : precioTxt(it)}</span>${extra}</div>`;
@@ -523,6 +527,7 @@ function renderCarta() {
       if (b.tipo === 'destacado') {
         dests ??= cuerpo.appendChild(el('div', 'dests'));
         for (const it of b.items) {
+          it.noche = b.horario === 'noche';
           byId[it.id] = it;
           const art = el('article', 'dest');
           art.dataset.pid = it.id;
@@ -539,11 +544,11 @@ function renderCarta() {
                 ${it.combo ? `<div><small>${esc(t.combo)}</small><b>${esc(it.agotado || it.comboAgotado ? t.agotado : fmt(it.combo))}</b><span>${it.comboIncluye.map(esc).join('<br>')}</span></div>` : ''}
               </div>
               ${it.desc ? `<p class="desc">${esc(it.desc)}</p>` : ''}
-              ${!it.agotado && !sinPrecio(it) ? `
+              ${!it.agotado && !sinPrecio(it) ? (fueraDeHora(it) ? `<p class="desc">${esc(t.soloParrilla)}</p>` : `
               <div class="dest-actions">
                 <button type="button" class="btn-pedir" data-add="${esc(it.id)}" data-var="sencillo">${esc(t.pedir)}</button>
                 ${it.combo && !it.comboAgotado ? `<button type="button" class="btn-pedir btn-pedir-combo" data-add="${esc(it.id)}" data-var="combo">${esc(t.pedirCombo)}</button>` : ''}
-              </div>` : ''}
+              </div>`) : ''}
             </div>`;
           dests.append(art);
         }
@@ -553,10 +558,11 @@ function renderCarta() {
         if (b.id) tab(b.id, (b.subtitulo || sec.titulo).toLowerCase());
         const ul = el('ul');
         for (const it of b.items) {
+          it.noche = b.horario === 'noche';
           byId[it.id] = it;
           const li = el('li');
           li.dataset.pid = it.id;
-          li.innerHTML = fila(it) + (it.agotado || sinPrecio(it) ? '' : `<button type="button" class="btn-add-item" data-add="${esc(it.id)}" data-var="sencillo" title="Agregar">${esc(t.pedir)}</button>`) + (noche && sec.id !== 'bebidas' ? btn3d(it) : '');   // 3D solo de noche y no en bebidas
+          li.innerHTML = fila(it) + (it.agotado || sinPrecio(it) || fueraDeHora(it) ? '' : `<button type="button" class="btn-add-item" data-add="${esc(it.id)}" data-var="sencillo" title="Agregar">${esc(t.pedir)}</button>`) + (noche && sec.id !== 'bebidas' ? btn3d(it) : '');   // 3D solo de noche y no en bebidas
           ul.append(li);
         }
         blk.append(ul);
@@ -678,10 +684,10 @@ function abrir(it) {
   const pWrap = $('#v-pedir-wrap');
   if (pWrap) {
     const t = I18N[lang];
-    pWrap.innerHTML = !it.agotado && !sinPrecio(it) ? `
+    pWrap.innerHTML = !it.agotado && !sinPrecio(it) ? (fueraDeHora(it) ? `<p class="desc">${esc(t.soloParrilla)}</p>` : `
       <button type="button" class="btn-pedir" id="v-add-sencillo">${esc(t.pedir)} ${esc(it.nombre)}</button>
       ${it.combo && !it.comboAgotado ? `<button type="button" class="btn-pedir btn-pedir-combo" id="v-add-combo">${esc(t.pedirCombo)}</button>` : ''}
-    ` : `<span class="sello">${esc(t.agotado)}</span>`;
+    `) : (it.agotado ? `<span class="sello">${esc(t.agotado)}</span>` : '');
     
     $('#v-add-sencillo')?.addEventListener('click', () => {
       agregarAlCarrito(it.id, 'sencillo');
@@ -719,7 +725,7 @@ function reconciliarCarrito() {
   const limpio = [];
   for (const c of cart) {
     const it = byId[c.id];
-    if (!it || it.agotado || sinPrecio(it)) continue;
+    if (!it || it.agotado || sinPrecio(it) || fueraDeHora(it)) continue;
     if (c.variante === 'combo' && (!it.combo || it.comboAgotado)) continue;
     const cant = Math.max(1, Math.min(99, parseInt(c.cantidad, 10) || 1));
     limpio.push({
